@@ -1,0 +1,1 @@
+# anilist-mal-sync-v2
