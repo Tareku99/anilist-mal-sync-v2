@@ -1,0 +1,129 @@
+"""MyAnimeList API client."""
+
+import logging
+from typing import Optional
+
+import requests
+
+from .models import AnimeEntry, WatchStatus
+
+logger = logging.getLogger(__name__)
+
+
+class MALClient:
+    """Client for MyAnimeList API v2."""
+
+    BASE_URL = "https://api.myanimelist.net/v2"
+
+    def __init__(self, access_token: str):
+        """Initialize MAL client with access token."""
+        self.access_token = access_token
+        self.session = requests.Session()
+        self.session.headers.update(
+            {
+                "Authorization": f"Bearer {access_token}",
+            }
+        )
+
+    def get_user_anime_list(self, username: str = "@me") -> list[AnimeEntry]:
+        """Fetch user's anime list from MyAnimeList."""
+        entries = []
+        url = f"{self.BASE_URL}/users/{username}/animelist"
+        params = {
+            "fields": "list_status,num_episodes,alternative_titles",
+            "limit": 1000,
+        }
+
+        while url:
+            response = self.session.get(url, params=params)
+            response.raise_for_status()
+            data = response.json()
+
+            for item in data.get("data", []):
+                entries.append(self._parse_entry(item))
+
+            # Pagination
+            url = data.get("paging", {}).get("next")
+            params = {}  # Next URL already contains params
+
+        logger.info(f"Fetched {len(entries)} anime entries from MyAnimeList")
+        return entries
+
+    def _parse_entry(self, item: dict) -> AnimeEntry:
+        """Parse MAL entry to common model."""
+        node = item.get("node", {})
+        list_status = item.get("list_status", {})
+
+        # Map MAL status to common status
+        status_map = {
+            "watching": WatchStatus.WATCHING,
+            "completed": WatchStatus.COMPLETED,
+            "on_hold": WatchStatus.ON_HOLD,
+            "dropped": WatchStatus.DROPPED,
+            "plan_to_watch": WatchStatus.PLAN_TO_WATCH,
+        }
+
+        # MAL uses 0-10 integer scores, convert to float
+        score = list_status.get("score")
+        if score is not None:
+            score = float(score)
+
+        return AnimeEntry(
+            mal_id=node.get("id"),
+            title=node.get("title"),
+            status=status_map.get(list_status.get("status"), WatchStatus.WATCHING),
+            score=score,
+            episodes_watched=list_status.get("num_episodes_watched", 0),
+            total_episodes=node.get("num_episodes"),
+            notes=list_status.get("comments"),
+            rewatched=list_status.get("num_times_rewatched", 0),
+        )
+
+    def update_anime(self, entry: AnimeEntry) -> bool:
+        """Update an anime entry on MyAnimeList."""
+        if not entry.mal_id:
+            logger.warning(f"Cannot update MAL entry without mal_id: {entry.title}")
+            return False
+
+        # Reverse map status
+        status_map = {
+            WatchStatus.WATCHING: "watching",
+            WatchStatus.COMPLETED: "completed",
+            WatchStatus.ON_HOLD: "on_hold",
+            WatchStatus.DROPPED: "dropped",
+            WatchStatus.PLAN_TO_WATCH: "plan_to_watch",
+        }
+
+        url = f"{self.BASE_URL}/anime/{entry.mal_id}/my_list_status"
+        data = {
+            "status": status_map.get(entry.status),
+            "num_watched_episodes": entry.episodes_watched,
+        }
+
+        if entry.score is not None:
+            data["score"] = int(entry.score)  # MAL expects integer
+
+        if entry.notes:
+            data["comments"] = entry.notes
+
+        try:
+            response = self.session.patch(url, data=data)
+            response.raise_for_status()
+            logger.info(f"Updated MAL entry: {entry.title}")
+            return True
+        except Exception as e:
+            logger.error(f"Failed to update MAL entry {entry.title}: {e}")
+            return False
+
+    def search_anime(self, title: str, limit: int = 5) -> list[dict]:
+        """Search for anime by title to find MAL ID."""
+        url = f"{self.BASE_URL}/anime"
+        params = {"q": title, "limit": limit}
+
+        try:
+            response = self.session.get(url, params=params)
+            response.raise_for_status()
+            return response.json().get("data", [])
+        except Exception as e:
+            logger.error(f"Failed to search MAL for '{title}': {e}")
+            return []

@@ -1,0 +1,12 @@
+version: '3.8'
+
+services:
+  sync:
+    build: .
+    image: anilist-mal-sync:latest
+    env_file:
+      - .env
+    volumes:
+      - ./data:/app/data
+    command: sync --mode ${SYNC_MODE:-bidirectional}
+    restart: unless-stopped
