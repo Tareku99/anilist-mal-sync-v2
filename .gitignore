@@ -35,7 +35,7 @@ ENV/
 
 # Environment and secrets
 .env
-.tokens.json
+tokens.json
 *.log
 
 # Testing
