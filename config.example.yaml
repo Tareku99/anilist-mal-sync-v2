@@ -1,0 +1,35 @@
+# AniList-MAL Sync Configuration
+# 
+# Get credentials from:
+# - AniList: https://anilist.co/settings/developer
+# - MyAnimeList: https://myanimelist.net/apiconfig
+#
+# After editing:
+#   - Restart container for immediate effect, OR
+#   - Wait up to 1 minute for auto-reload
+
+oauth:
+  port: 18080
+  redirect_uri: "http://localhost:18080/callback"  # Change to your server IP for Docker/Unraid
+
+anilist:
+  client_id: "YOUR_ANILIST_CLIENT_ID_HERE"
+  client_secret: "YOUR_ANILIST_CLIENT_SECRET_HERE"
+  username: "YOUR_ANILIST_USERNAME_HERE"
+  # auth_url: "https://anilist.co/api/v2/oauth/authorize"  # Optional, has defaults
+  # token_url: "https://anilist.co/api/v2/oauth/token"      # Optional, has defaults
+
+myanimelist:  # You can also use "mal" instead
+  client_id: "YOUR_MAL_CLIENT_ID_HERE"
+  client_secret: "YOUR_MAL_CLIENT_SECRET_HERE"
+  username: "YOUR_MAL_USERNAME_HERE"
+  # auth_url: "https://myanimelist.net/v1/oauth2/authorize"  # Optional, has defaults
+  # token_url: "https://myanimelist.net/v1/oauth2/token"     # Optional, has defaults
+
+sync:
+  mode: "bidirectional"  # Options: anilist-to-mal, mal-to-anilist, bidirectional
+  interval: 360          # Sync interval in minutes (360 = 6 hours)
+  log_level: "INFO"      # Options: DEBUG, INFO, WARNING, ERROR
+  dry_run: false         # If true, shows what would change without making changes
+
+# token_file_path: "/app/data/tokens.json"  # Optional, has default

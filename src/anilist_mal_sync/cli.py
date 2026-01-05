@@ -2,15 +2,73 @@
 
 import logging
 import sys
+import time
 
 import click
+import requests
 
 from .anilist_client import AniListClient
-from .config import get_settings
+from .config import Settings, get_settings, validate_credentials
 from .mal_client import MALClient
 from .sync_engine import SyncEngine
 
 logger = logging.getLogger(__name__)
+
+# Constants
+HTTP_UNAUTHORIZED = 401
+HTTP_FORBIDDEN = 403
+DEFAULT_SYNC_INTERVAL_MINUTES = 360  # 6 hours
+CONFIG_RETRY_INTERVAL_SECONDS = 60  # 1 minute
+
+
+def _require_valid_config():
+    """Validate config credentials and exit if invalid."""
+    is_valid, invalid_vars = validate_credentials()
+    if not is_valid:
+        _show_config_error(invalid_vars)
+
+
+def _load_tokens(settings: Settings):
+    """Load and validate tokens from file or environment.
+    
+    Returns:
+        tuple: (anilist_token, mal_token, token_manager, refresh_mal_token)
+    """
+    from .oauth import TokenManager, refresh_mal_token
+    
+    token_manager = TokenManager(settings.token_file)
+    
+    # Get valid tokens (auto-refresh if needed)
+    anilist_token = (
+        settings.anilist_access_token 
+        or token_manager.get_valid_token("anilist", settings)
+    )
+    mal_token = (
+        settings.mal_access_token 
+        or token_manager.get_valid_token("mal", settings, refresh_mal_token)
+    )
+    
+    return anilist_token, mal_token, token_manager, refresh_mal_token
+
+
+def _show_config_error(invalid_vars: list[str], config_path: str = "data/config.yaml", exit_code: int = 1):
+    """Display configuration error message and optionally exit."""
+    logger.error("="*60)
+    logger.error("❌ CONFIGURATION ERROR: Missing or invalid credentials")
+    logger.error("="*60)
+    logger.error("Missing/invalid variables:")
+    for var in invalid_vars:
+        logger.error(f"  - {var}")
+    logger.error("")
+    logger.error("📋 Required steps:")
+    logger.error("  1. Get AniList credentials: https://anilist.co/settings/developer")
+    logger.error("  2. Get MAL credentials: https://myanimelist.net/apiconfig")
+    logger.error(f"  3. Edit {config_path} with your credentials")
+    logger.error("")
+    logger.error("💡 Make sure to replace ALL placeholder values")
+    logger.error("="*60)
+    if exit_code is not None:
+        sys.exit(exit_code)
 
 
 def setup_logging(level: str):
@@ -51,56 +109,62 @@ def main():
 )
 def sync(mode: str, dry_run: bool, log_level: str):
     """Sync anime lists between AniList and MyAnimeList."""
-    from .oauth import TokenManager, refresh_mal_token
-
     settings = get_settings()
     setup_logging(log_level or settings.log_level)
-
-    logger = logging.getLogger(__name__)
     
-    # Validate required configuration
-    if not settings.anilist_username:
-        logger.error("ANILIST_USERNAME not configured in .env file")
-        sys.exit(1)
-    if not settings.mal_username:
-        logger.error("MAL_USERNAME not configured in .env file")
-        sys.exit(1)
+    # Validate credentials are not placeholders
+    _require_valid_config()
 
     # Override settings with CLI args
     if dry_run:
         settings.dry_run = True
 
     # Load tokens from file or env
-    token_manager = TokenManager(settings.token_file)
-    
-    # Get valid tokens (auto-refresh if needed)
-    anilist_token = (
-        settings.anilist_access_token 
-        or token_manager.get_valid_token("anilist", settings)
-    )
-    mal_token = (
-        settings.mal_access_token 
-        or token_manager.get_valid_token("mal", settings, refresh_mal_token)
-    )
+    anilist_token, mal_token, token_manager, refresh_mal_token = _load_tokens(settings)
 
-    # Validate credentials
-    if not anilist_token:
-        logger.error("AniList access token not found. Run: anilist-mal-sync auth")
-        sys.exit(1)
-
-    if not mal_token:
-        logger.error("MyAnimeList access token not found. Run: anilist-mal-sync auth")
-        sys.exit(1)
-
-    # Initialize clients
-    logger.info("Initializing API clients...")
-    anilist_client = AniListClient(anilist_token)
-    mal_client = MALClient(mal_token)
-
-    # Run sync
-    engine = SyncEngine(anilist_client, mal_client, dry_run=settings.dry_run)
+    # Validate credentials - if missing, trigger auto-auth
+    if not anilist_token or not mal_token:
+        logger.info("No authentication found - starting automatic OAuth flow...")
+        logger.info("")
+        
+        # Automatically trigger authentication
+        from .oauth import run_oauth_flow
+        auth_success = True
+        
+        for service in ["anilist", "mal"]:
+            logger.info(f"Authenticating {service.upper()}...")
+            try:
+                if not run_oauth_flow(service, settings, token_manager):
+                    logger.error(f"Failed to authenticate {service.upper()}")
+                    auth_success = False
+            except Exception as auth_error:
+                logger.error(f"Error during {service.upper()} authentication: {auth_error}")
+                auth_success = False
+        
+        if not auth_success:
+            logger.error("Authentication failed. Please try running: anilist-mal-sync auth")
+            sys.exit(1)
+        
+        # Reload tokens after successful auth
+        anilist_token = token_manager.get_valid_token("anilist", settings)
+        mal_token = token_manager.get_valid_token("mal", settings, refresh_mal_token)
+        
+        if not anilist_token or not mal_token:
+            logger.error("Failed to load tokens after authentication")
+            sys.exit(1)
+        
+        logger.info("")
+        logger.info("Authentication successful! Starting sync...")
+        logger.info("")
 
     try:
+        # Initialize clients
+        logger.info("Initializing API clients...")
+        anilist_client = AniListClient(anilist_token)
+        mal_client = MALClient(mal_token)
+
+        # Run sync
+        engine = SyncEngine(anilist_client, mal_client, dry_run=settings.dry_run)
         result = engine.sync(mode)
 
         if result.dry_run:
@@ -117,12 +181,74 @@ def sync(mode: str, dry_run: bool, log_level: str):
             for error in result.errors[:10]:  # Show first 10
                 click.echo(f"  - {error}")
 
+        # Success - exit normally
         sys.exit(0 if result.success else 1)
-
+        
+    except requests.HTTPError as e:
+        if e.response is not None and e.response.status_code in (HTTP_UNAUTHORIZED, HTTP_FORBIDDEN):
+            logger.error("="*60)
+            logger.error("AUTHENTICATION FAILED: Tokens are invalid or expired")
+            logger.error("="*60)
+            logger.error("")
+            logger.error("Starting automatic re-authentication...")
+            logger.error("Please complete the OAuth flow in your browser.")
+            logger.error("")
+            
+            # Automatically trigger re-authentication
+            from .oauth import run_oauth_flow
+            reauth_success = True
+            
+            for service in ["anilist", "mal"]:
+                logger.info(f"Re-authenticating {service.upper()}...")
+                try:
+                    if not run_oauth_flow(service, settings, token_manager):
+                        logger.error(f"Failed to re-authenticate {service.upper()}")
+                        reauth_success = False
+                except Exception as auth_error:
+                    logger.error(f"Error during {service.upper()} re-auth: {auth_error}")
+                    reauth_success = False
+            
+            if reauth_success:
+                logger.info("")
+                logger.info("="*60)
+                logger.info("Re-authentication successful! Retrying sync...")
+                logger.info("="*60)
+                
+                # Reload tokens and retry sync once
+                anilist_token = token_manager.get_valid_token("anilist", settings)
+                mal_token = token_manager.get_valid_token("mal", settings, refresh_mal_token)
+                
+                try:
+                    anilist_client = AniListClient(anilist_token)
+                    mal_client = MALClient(mal_token)
+                    engine = SyncEngine(anilist_client, mal_client, dry_run=settings.dry_run)
+                    result = engine.sync(mode)
+                    
+                    click.echo(f"\n=== Sync Results ===")
+                    click.echo(f"Mode: {mode}")
+                    click.echo(f"Success: {result.success}")
+                    click.echo(f"Entries synced: {result.entries_synced}")
+                    click.echo(f"Entries failed: {result.entries_failed}")
+                    
+                    sys.exit(0 if result.success else 1)
+                except Exception as retry_error:
+                    logger.error(f"Sync failed after re-authentication: {retry_error}")
+                    sys.exit(1)
+            else:
+                logger.error("")
+                logger.error("="*60)
+                logger.error("Re-authentication failed")
+                logger.error("Please run manually: anilist-mal-sync auth")
+                logger.error("="*60)
+                sys.exit(1)
+        else:
+            raise  # Re-raise other HTTP errors
+            
     except Exception as e:
         logger.exception("Sync failed with error")
         click.echo(f"Error: {e}", err=True)
         sys.exit(1)
+
 
 
 @main.command()
@@ -139,18 +265,8 @@ def auth(service: str):
     settings = get_settings()
     setup_logging("INFO")
     
-    logger = logging.getLogger(__name__)
-    
-    # Validate required configuration based on service
-    if service in ["anilist", "both"]:
-        if not settings.anilist_client_id or not settings.anilist_client_secret:
-            logger.error("ANILIST_CLIENT_ID and ANILIST_CLIENT_SECRET must be configured in .env file")
-            sys.exit(1)
-    
-    if service in ["mal", "both"]:
-        if not settings.mal_client_id or not settings.mal_client_secret:
-            logger.error("MAL_CLIENT_ID and MAL_CLIENT_SECRET must be configured in .env file")
-            sys.exit(1)
+    # Validate credentials are not placeholders
+    _require_valid_config()
     
     click.echo("=== OAuth Authentication Setup ===\n")
     
@@ -175,6 +291,136 @@ def auth(service: str):
         click.echo("\nYou can now run: anilist-mal-sync sync")
     else:
         sys.exit(1)
+
+
+@main.command()
+@click.option(
+    "--mode",
+    type=click.Choice(["anilist-to-mal", "mal-to-anilist", "bidirectional"]),
+    default="bidirectional",
+    help="Sync mode: one-way or bidirectional",
+)
+@click.option(
+    "--interval",
+    type=int,
+    default=DEFAULT_SYNC_INTERVAL_MINUTES,
+    help=f"Sync interval in minutes (default: {DEFAULT_SYNC_INTERVAL_MINUTES} = 6 hours)",
+)
+@click.option(
+    "--log-level",
+    type=click.Choice(["DEBUG", "INFO", "WARNING", "ERROR"]),
+    default="INFO",
+    help="Logging level",
+)
+@click.option(
+    "--wait-for-config",
+    is_flag=True,
+    help="Wait and retry if config is invalid (for Docker first-run)",
+)
+def run(mode: str, interval: int, log_level: str, wait_for_config: bool):
+    """Run continuous sync at specified interval (like Docker service)."""
+    import os
+    
+    setup_logging(log_level)
+    
+    # Docker first-run mode: wait for valid config
+    if wait_for_config:
+        retry_count = 0
+        retry_interval = CONFIG_RETRY_INTERVAL_SECONDS
+        
+        logger.info("="*60)
+        logger.info("AniList-MAL Sync - Configuration Validator")
+        logger.info("="*60)
+        
+        while True:
+            retry_count += 1
+            logger.info(f"\n[Attempt #{retry_count}] Validating configuration...")
+            
+            # Reload config from file (user may have edited it)
+            # Note: This creates a fresh Settings instance which reloads from disk
+            _ = get_settings()
+            
+            # Check if valid
+            is_valid, invalid_vars = validate_credentials()
+            
+            if is_valid:
+                logger.info("✅ Configuration validated successfully!")
+                logger.info("Starting sync service...\n")
+                break  # Exit retry loop and start service
+            
+            # Show error and wait
+            logger.error("")
+            _show_config_error(invalid_vars, "/app/data/config.yaml", exit_code=None)
+            logger.error("")
+            logger.error("🔄 Options to apply changes:")
+            logger.error(f"  • WAIT: Config will auto-reload in {retry_interval} seconds")
+            logger.error("  • FASTER: Restart container to apply immediately")
+            logger.error("")
+            logger.error(f"⏳ Checking again in {retry_interval} seconds...")
+            logger.error("="*60)
+            
+            time.sleep(retry_interval)
+    else:
+        # Normal mode: fail fast if config invalid
+        # Load config first to populate os.environ
+        _ = get_settings()
+        is_valid, invalid_vars = validate_credentials()
+        if not is_valid:
+            _show_config_error(invalid_vars)
+    
+    # Convert minutes to seconds
+    interval_seconds = interval * 60
+    
+    logger.info("="*60)
+    logger.info("Starting AniList-MAL Sync Service")
+    logger.info(f"Mode: {mode}")
+    logger.info(f"Interval: {interval} minutes ({interval//60}h {interval%60}m)")
+    logger.info("="*60)
+    logger.info("")
+    
+    run_count = 0
+    
+    while True:
+        run_count += 1
+        logger.info(f"Starting sync run #{run_count}...")
+        
+        # Config is loaded at module import from config.yaml
+        
+        # Directly invoke sync function (no CliRunner isolation)
+        import click
+        ctx = click.Context(sync)
+        ctx.params = {
+            'mode': mode,
+            'dry_run': False,
+            'log_level': log_level
+        }
+        
+        try:
+            with ctx:
+                sync.invoke(ctx)
+            logger.info(f"Sync run #{run_count} completed successfully")
+        except SystemExit as e:
+            if e.code == 0:
+                logger.info(f"Sync run #{run_count} completed successfully")
+            else:
+                logger.error(f"Sync run #{run_count} failed with exit code {e.code}")
+        except Exception as e:
+            logger.error(f"Sync run #{run_count} failed: {e}")
+        
+        logger.info("")
+        logger.info(f"Waiting {interval} minutes until next sync...")
+        logger.info(f"Next sync at: {time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(time.time() + interval_seconds))}")
+        logger.info("")
+        
+        try:
+            time.sleep(interval_seconds)
+        except KeyboardInterrupt:
+            logger.info("")
+            logger.info("="*60)
+            logger.info("Service stopped by user")
+            logger.info(f"Total sync runs: {run_count}")
+            logger.info("="*60)
+            sys.exit(0)
 
 
 if __name__ == "__main__":

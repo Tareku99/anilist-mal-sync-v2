@@ -34,7 +34,7 @@ ENV/
 *~
 
 # Environment and secrets
-.env
+config.yaml
 tokens.json
 *.log
 

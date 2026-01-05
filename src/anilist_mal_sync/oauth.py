@@ -17,6 +17,13 @@ from .config import Settings
 
 logger = logging.getLogger(__name__)
 
+# Constants
+TOKEN_EXPIRY_BUFFER_SECONDS = 300  # Refresh tokens 5 minutes before expiry
+HTTP_OK = 200
+HTTP_NOT_FOUND = 404
+HTTP_UNAUTHORIZED = 401
+HTTP_FORBIDDEN = 403
+
 
 class TokenManager:
     """Manages OAuth tokens with persistence and auto-refresh."""
@@ -81,7 +88,7 @@ class TokenManager:
 
         self.save_tokens()
 
-    def is_token_expired(self, service: str, buffer_seconds: int = 300) -> bool:
+    def is_token_expired(self, service: str, buffer_seconds: int = TOKEN_EXPIRY_BUFFER_SECONDS) -> bool:
         """Check if token is expired or will expire soon (within buffer)."""
         expiry_str = self.data.get("tokens", {}).get(service, {}).get("expiry")
         if not expiry_str:
@@ -142,7 +149,7 @@ class OAuthCallbackHandler(BaseHTTPRequestHandler):
             OAuthCallbackHandler.state = params.get("state", [None])[0]
 
             # Send response to browser
-            self.send_response(200)
+            self.send_response(HTTP_OK)
             self.send_header("Content-type", "text/html")
             self.end_headers()
             
@@ -150,7 +157,7 @@ class OAuthCallbackHandler(BaseHTTPRequestHandler):
             <html>
             <head><title>Authentication Successful</title></head>
             <body>
-                <h1>✅ Authentication Successful!</h1>
+                <h1>Authentication Successful!</h1>
                 <p>You can close this window and return to the terminal.</p>
                 <script>window.close();</script>
             </body>
@@ -158,7 +165,7 @@ class OAuthCallbackHandler(BaseHTTPRequestHandler):
             """
             self.wfile.write(html.encode())
         else:
-            self.send_error(404)
+            self.send_error(HTTP_NOT_FOUND)
 
     def log_message(self, format, *args):
         """Suppress HTTP server logging."""

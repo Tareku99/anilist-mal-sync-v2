@@ -4,6 +4,7 @@ import logging
 from typing import Literal
 
 from .anilist_client import AniListClient
+from .config import get_settings
 from .mal_client import MALClient
 from .models import AnimeEntry, SyncResult
 
@@ -23,6 +24,57 @@ class SyncEngine:
         self.anilist = anilist_client
         self.mal = mal_client
         self.dry_run = dry_run
+
+    @staticmethod
+    def _normalize_score_for_mal(score: float | None) -> int | None:
+        """Normalize score to MAL's 0-10 integer scale."""
+        if score is None:
+            return None
+        normalized = score
+        if normalized > 10:
+            normalized = normalized / 10.0
+        return int(round(normalized))
+
+    @staticmethod
+    def _safe_title(title: str) -> str:
+        """Return a console-safe title string (avoid encoding errors on Windows)."""
+        if not title:
+            return ""
+        return title.encode("ascii", "replace").decode("ascii")
+
+    def _needs_update(
+        self, 
+        source_entry: AnimeEntry, 
+        target_entry: AnimeEntry | None, 
+        score_sync_mode: str
+    ) -> bool:
+        """Check if target entry needs update based on source entry."""
+        if target_entry is None:
+            logger.debug("    -> Target entry is None, will update")
+            return True
+
+        # Compare fields we actually send to the target
+        if source_entry.status != target_entry.status:
+            logger.debug(f"  Status differs: {source_entry.status} != {target_entry.status}")
+            return True
+        if source_entry.episodes_watched != target_entry.episodes_watched:
+            logger.debug(f"  Episodes differ: {source_entry.episodes_watched} != {target_entry.episodes_watched}")
+            return True
+        if source_entry.rewatched != target_entry.rewatched:
+            logger.debug(f"  Rewatched differs: {source_entry.rewatched} != {target_entry.rewatched}")
+            return True
+        if (source_entry.notes or "") != (target_entry.notes or ""):
+            logger.debug(f"  Notes differ: '{source_entry.notes}' != '{target_entry.notes}'")
+            return True
+
+        if score_sync_mode == "auto":
+            source_score = self._normalize_score_for_mal(source_entry.score)
+            target_score = self._normalize_score_for_mal(target_entry.score)
+            if source_score != target_score:
+                logger.debug(f"  Score differs: {source_score} != {target_score}")
+                return True
+
+        return False
 
     def sync(
         self, mode: Literal["anilist-to-mal", "mal-to-anilist", "bidirectional"]
@@ -51,52 +103,10 @@ class SyncEngine:
             "failed": 0,
         }
 
-        def _normalize_score_for_mal(score: float | None) -> int | None:
-            if score is None:
-                return None
-            normalized = score
-            if normalized > 10:
-                normalized = normalized / 10.0
-            return int(round(normalized))
-
-        def _safe_title(title: str) -> str:
-            """Return a console-safe title string (avoid encoding errors on Windows)."""
-            if not title:
-                return ""
-            return title.encode("ascii", "replace").decode("ascii")
-
-        def _needs_update(source_entry: AnimeEntry, target_entry: AnimeEntry | None, score_sync_mode: str) -> bool:
-            if target_entry is None:
-                logger.debug(f"    -> Target entry is None (not in MAL), will update")
-                return True
-
-            # Compare fields we actually send to the target
-            if source_entry.status != target_entry.status:
-                logger.debug(f"  Status differs: {source_entry.status} != {target_entry.status}")
-                return True
-            if source_entry.episodes_watched != target_entry.episodes_watched:
-                logger.debug(f"  Episodes differ: {source_entry.episodes_watched} != {target_entry.episodes_watched}")
-                return True
-            if source_entry.rewatched != target_entry.rewatched:
-                logger.debug(f"  Rewatched differs: {source_entry.rewatched} != {target_entry.rewatched}")
-                return True
-            if (source_entry.notes or "") != (target_entry.notes or ""):
-                logger.debug(f"  Notes differ: '{source_entry.notes}' != '{target_entry.notes}'")
-                return True
-
-            if score_sync_mode == "auto":
-                source_score = _normalize_score_for_mal(source_entry.score)
-                target_score = _normalize_score_for_mal(target_entry.score)
-                if source_score != target_score:
-                    logger.debug(f"  Score differs: {source_score} != {target_score}")
-                    return True
-
-            return False
+        settings = get_settings()
 
         # Fetch source list (use configured username for AniList)
         if source == "anilist":
-            from .config import get_settings
-            settings = get_settings()
             username = settings.anilist_username or None
             source_entries = self.anilist.get_user_anime_list(username)
             target_client = self.mal
@@ -104,7 +114,9 @@ class SyncEngine:
         else:
             source_entries = self.mal.get_user_anime_list()
             target_client = self.anilist
-            target_entries = {}
+            # For MAL -> AniList, fetch target list to build lookup dict for change detection
+            username = settings.anilist_username or None
+            target_entries = {e.anilist_id: e for e in target_client.get_user_anime_list(username) if e.anilist_id}
 
         # Update target for each entry
         for entry in source_entries:
@@ -114,26 +126,27 @@ class SyncEngine:
                 # If syncing AniList -> MAL and MAL ID is missing, skip with a clear log
                 if source == "anilist" and not entry.mal_id:
                     summary["skipped_missing_id"] += 1
-                    logger.warning(f"Skipping AniList entry without MAL ID: {_safe_title(entry.title)}")
+                    logger.warning(f"Skipping AniList entry without MAL ID: {self._safe_title(entry.title)}")
                     continue
 
-                # Skip if target already matches (only for AniList -> MAL where we have target state)
+                # Check if update is needed for AniList -> MAL
                 if target == "mal" and entry.mal_id:
-                    logger.debug(f"Checking if update needed for {_safe_title(entry.title)} (MAL ID {entry.mal_id})")
                     target_entry = target_entries.get(entry.mal_id)
                     score_mode = settings.score_sync_mode if source == "anilist" else "disabled"
+                    target_id = entry.mal_id
+                    
+                    logger.debug(f"Checking if update needed for {self._safe_title(entry.title)} (MAL ID {target_id})")
                     if target_entry is None:
                         logger.debug(f"  -> MAL entry not found in dict, will update")
-                    if not _needs_update(entry, target_entry, score_mode):
+                    elif not self._needs_update(entry, target_entry, score_mode):
                         summary["skipped_unchanged"] += 1
-                        logger.info(f"No changes for {_safe_title(entry.title)}, skipping")
+                        logger.info(f"No changes for {self._safe_title(entry.title)}, skipping")
                         continue
                     else:
                         logger.debug(f"  -> Will update (changes detected)")
 
                 # If syncing MAL -> AniList, resolve AniList ID when missing
                 if target == "anilist" and not entry.anilist_id:
-                    from .anilist_client import AniListClient
                     if isinstance(self.anilist, AniListClient):
                         matches = self.anilist.search_anime(entry.title, limit=3)
                         match_id = None
@@ -150,11 +163,27 @@ class SyncEngine:
                             entry.anilist_id = match_id
                         else:
                             summary["skipped_not_found"] += 1
-                            logger.warning(f"No AniList match found for MAL entry: {_safe_title(entry.title)}")
+                            logger.warning(f"No AniList match found for MAL entry: {self._safe_title(entry.title)}")
                             continue
+                
+                # Check if update is needed for MAL -> AniList (after resolving ID)
+                elif target == "anilist" and entry.anilist_id:
+                    target_entry = target_entries.get(entry.anilist_id)
+                    score_mode = "auto"  # AniList accepts 100-point scores, so we can sync them
+                    target_id = entry.anilist_id
+                    
+                    logger.debug(f"Checking if update needed for {self._safe_title(entry.title)} (AniList ID {target_id})")
+                    if target_entry is None:
+                        logger.debug(f"  -> AniList entry not found in dict, will update")
+                    elif not self._needs_update(entry, target_entry, score_mode):
+                        summary["skipped_unchanged"] += 1
+                        logger.info(f"No changes for {self._safe_title(entry.title)}, skipping")
+                        continue
+                    else:
+                        logger.debug(f"  -> Will update (changes detected)")
 
                 if self.dry_run:
-                    logger.info(f"[DRY RUN] Would sync: {_safe_title(entry.title)}")
+                    logger.info(f"[DRY RUN] Would sync: {self._safe_title(entry.title)}")
                     result.entries_synced += 1
                     summary["updated"] += 1
                 else:
@@ -166,7 +195,7 @@ class SyncEngine:
                         summary["failed"] += 1
                         result.errors.append(f"Failed to sync: {entry.title}")
             except Exception as e:
-                logger.error(f"Error syncing {_safe_title(entry.title)}: {e}")
+                logger.error(f"Error syncing {self._safe_title(entry.title)}: {e}")
                 result.entries_failed += 1
                 summary["failed"] += 1
                 result.errors.append(f"{entry.title}: {str(e)}")
@@ -182,8 +211,6 @@ class SyncEngine:
 
     def _sync_bidirectional(self) -> SyncResult:
         """Sync both ways with conflict resolution (latest update wins)."""
-        from .config import get_settings
-        
         result = SyncResult(success=True, dry_run=self.dry_run)
         settings = get_settings()
         username = settings.anilist_username or None
@@ -246,6 +273,8 @@ class SyncEngine:
                     f"(MAL: {mal_entry.updated_at}, AL: {anilist_entry.updated_at}), syncing to AniList"
                 )
                 if not self.dry_run:
+                    # Copy AniList ID from the matched entry to the MAL entry
+                    mal_entry.anilist_id = anilist_entry.anilist_id
                     self.anilist.update_anime(mal_entry)
             else:
                 logger.debug(f"Entries in sync for {anilist_entry.title}, same update time")
@@ -259,4 +288,6 @@ class SyncEngine:
             elif mal_entry.episodes_watched > anilist_entry.episodes_watched:
                 logger.info(f"MAL has more progress for {mal_entry.title}, syncing to AniList")
                 if not self.dry_run:
+                    # Copy AniList ID from the matched entry to the MAL entry
+                    mal_entry.anilist_id = anilist_entry.anilist_id
                     self.anilist.update_anime(mal_entry)

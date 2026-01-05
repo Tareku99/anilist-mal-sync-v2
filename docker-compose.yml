@@ -1,12 +1,22 @@
-version: '3.8'
-
 services:
   sync:
     build: .
     image: anilist-mal-sync:latest
-    env_file:
-      - .env
     volumes:
       - ./data:/app/data
-    command: sync --mode ${SYNC_MODE:-bidirectional}
+    ports:
+      - "18080:18080"  # OAuth callback port
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-m", "anilist_mal_sync.healthcheck"]
+      interval: 5m
+      timeout: 10s
+      start_period: 10s
+      retries: 3
+    # Exit code 2 = auth required, don't restart on auth failures
+    # This prevents restart loops when tokens expire
+    deploy:
+      restart_policy:
+        condition: on-failure
+        max_attempts: 3
+

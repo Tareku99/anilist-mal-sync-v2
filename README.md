@@ -1,138 +1,227 @@
 # AniList ⇄ MyAnimeList Sync
 
-A service to synchronize anime and manga lists between AniList and MyAnimeList with support for bidirectional sync.
+A service to synchronize anime lists between AniList and MyAnimeList with support for bidirectional sync.
 
 ## Features
 
-- **Sync Modes**:
-  - AniList → MyAnimeList (one-way)
-  - MyAnimeList → AniList (one-way)
-  - Bidirectional sync with conflict resolution
-- **Anime support** (manga coming soon)
-- **Docker deployment** or manual execution
+- **Bidirectional sync** with conflict resolution (latest update wins)
+- **One-way sync modes**: AniList → MAL or MAL → AniList
 - **OAuth authentication** for both services
-- **Rate limiting** and retry logic
+- **Docker deployment** with auto-configuration
+- **YAML-based configuration** with validation
+- **Rate limiting** and automatic retry logic
 
 ## Quick Start
 
-### Local Setup
+### 1. Get API Credentials
+
+You need OAuth credentials from both services:
+
+**AniList:**
+1. Visit https://anilist.co/settings/developer
+2. Click "Create Client"
+3. Copy the **Client ID** and **Client Secret**
+
+**MyAnimeList:**
+1. Visit https://myanimelist.net/apiconfig
+2. Click "Create ID"
+3. Copy the **Client ID** and **Client Secret**
+
+### 2. Install
 
 ```bash
-# Install dependencies
-pip install setuptools wheel requests click python-dotenv pydantic pydantic-settings
-
-# Set PYTHONPATH (Windows PowerShell)
-$env:PYTHONPATH="$PWD\src"
-
-# Copy and configure credentials
-Copy-Item .env.example .env
-# Edit .env with your client IDs and secrets
-
-# Run OAuth authentication (opens browser)
-py -m anilist_mal_sync.cli auth
-
-# Run sync
-py -m anilist_mal_sync.cli sync --mode anilist-to-mal
+git clone https://github.com/yourusername/anilist-mal-sync
+cd anilist-mal-sync
+py install.py  # Creates venv and installs dependencies
 ```
 
-### Docker
+### 3. Configure
 
 ```bash
-# Build image
-docker build -t anilist-mal-sync .
+# Copy template
+cp config.example.yaml data/config.yaml
 
-# Run container
-docker run --env-file .env anilist-mal-sync sync --mode anilist-to-mal
+# Edit with your credentials
+notepad data/config.yaml  # Windows
+nano data/config.yaml     # Linux/macOS
 ```
 
-## Authentication
+**Minimum required config:**
 
-### Quick Setup (Recommended)
+```yaml
+anilist:
+  client_id: "your_anilist_client_id"
+  client_secret: "your_anilist_client_secret"
+  username: "your_anilist_username"
 
-1. **Get API Client Credentials**:
-   - **AniList**: https://anilist.co/settings/developer → Create Client
-   - **MyAnimeList**: https://myanimelist.net/apiconfig → Create App
+myanimelist:
+  client_id: "your_mal_client_id"
+  client_secret: "your_mal_client_secret"
+  username: "your_mal_username"
+```
 
-2. **Configure `.env`** *(required)*:
-   ```bash
-   Copy-Item .env.example .env
-   ```
-   
-   Edit `.env` and add your credentials (**all fields required**):
-   ```env
-   # API Credentials (required)
-   ANILIST_CLIENT_ID=your_client_id
-   ANILIST_CLIENT_SECRET=your_client_secret
-   MAL_CLIENT_ID=your_client_id
-   MAL_CLIENT_SECRET=your_client_secret
-   
-   # Usernames (required)
-   ANILIST_USERNAME=your_username
-   MAL_USERNAME=your_username
-   ```
+### 4. Authenticate
 
-3. **Run OAuth Flow** (opens browser, saves tokens automatically):
-   ```bash
-   py -m anilist_mal_sync.cli auth
-   # Or authenticate with just one service:
-   py -m anilist_mal_sync.cli auth --service anilist
-   py -m anilist_mal_sync.cli auth --service mal
-   ```
+```bash
+.venv\Scripts\activate  # Windows
+source .venv/bin/activate  # Linux/macOS
 
-Tokens are saved to `data/tokens.json` and automatically loaded for sync operations.
+anilist-mal-sync auth
+```
 
-## Sync Modes
+This opens your browser to authorize both services and saves tokens to `data/tokens.json`.
 
-- `anilist-to-mal`: One-way sync from AniList to MyAnimeList
-- `mal-to-anilist`: One-way sync from MyAnimeList to AniList
-- `bidirectional`: Two-way sync with conflict resolution (latest update wins)
+### 5. Sync
+
+```bash
+# One-time sync
+anilist-mal-sync sync --mode bidirectional
+
+# Continuous sync (every 6 hours)
+anilist-mal-sync run --interval 360
+```
 
 ## Configuration
 
-Create a `.env` file or set environment variables:
+All settings are in `data/config.yaml`. The file is auto-created with placeholders on first run.
 
-```env
-# OAuth Configuration (optional - defaults provided)
-OAUTH_PORT=18080
-OAUTH_REDIRECT_URI=http://localhost:18080/callback
+**Complete example:**
 
-# API Client Credentials (REQUIRED)
-ANILIST_CLIENT_ID=your_client_id
-ANILIST_CLIENT_SECRET=your_secret
-MAL_CLIENT_ID=your_client_id
-MAL_CLIENT_SECRET=your_secret
+```yaml
+oauth:
+  port: 18080
+  redirect_uri: "http://localhost:18080/callback"
 
-# Usernames (REQUIRED)
-ANILIST_USERNAME=your_username
-MAL_USERNAME=your_username
+anilist:
+  client_id: "your_id"
+  client_secret: "your_secret"
+  username: "your_username"
 
-# Sync Options (optional - defaults provided)
-SYNC_MODE=bidirectional
-SCORE_SYNC_MODE=auto  # auto: normalize scores (AniList 100-point → MAL 0-10), disabled: don't sync scores
-DRY_RUN=false
-LOG_LEVEL=INFO
+myanimelist:  # Can also use "mal" instead
+  client_id: "your_id"
+  client_secret: "your_secret"
+  username: "your_username"
 
-# Token Storage (optional - default: data/tokens.json)
-TOKEN_FILE=data/tokens.json
+sync:
+  mode: "bidirectional"  # Options: anilist-to-mal, mal-to-anilist, bidirectional
+  interval: 360          # Minutes between syncs (for run command)
+  log_level: "INFO"      # Options: DEBUG, INFO, WARNING, ERROR
+  dry_run: false         # If true, shows changes without applying them
 ```
 
-**Required Fields:**
-- Client credentials are validated when running `auth` command
-- Usernames are validated when running `sync` command
-- Missing required fields will cause clear error messages
+**Notes:**
+- Config uses Pydantic models for automatic validation
+- Missing required fields show helpful error messages with links to credential pages
+- Only required fields need to be set; optional fields have sensible defaults
+- Same config file works for local dev and Docker
 
-**Note**: Access tokens are obtained via the `auth` command and stored in `tokens.json`.
+## Authentication
 
-## Token Management
+### First-Time Setup
 
-### Auto-Refresh Behavior
-
-- **MyAnimeList**: Tokens expire after **31 days** and are **automatically refreshed** using the refresh token
-- **AniList**: Tokens expire after **1 year** and **require manual re-authentication** (AniList does not provide refresh tokens)
-
-When your AniList token expires, simply run:
 ```bash
-py -m anilist_mal_sync.cli auth --service anilist
+anilist-mal-sync auth
+```
+
+Opens browser for OAuth authorization. Tokens are saved to `data/tokens.json`.
+
+### Authenticate Individual Services
+
+```bash
+anilist-mal-sync auth --service anilist  # AniList only
+anilist-mal-sync auth --service mal      # MyAnimeList only
+```
+
+### Token Expiration
+
+- **MyAnimeList**: Tokens expire after 31 days, **auto-refresh** using refresh token
+- **AniList**: Tokens expire after 1 year, requires **manual re-auth**:
+  ```bash
+  anilist-mal-sync auth --service anilist
+  ```
+
+## Usage
+
+### One-Time Sync
+
+```bash
+# Bidirectional (both ways)
+anilist-mal-sync sync --mode bidirectional
+
+# One-way sync
+anilist-mal-sync sync --mode anilist-to-mal
+anilist-mal-sync sync --mode mal-to-anilist
+
+# Dry run (see changes without applying)
+anilist-mal-sync sync --dry-run
+```
+
+### Continuous Sync
+
+```bash
+# Every 6 hours (default)
+anilist-mal-sync run
+
+# Custom interval (in minutes)
+anilist-mal-sync run --interval 60  # Every hour
+anilist-mal-sync run --interval 1440  # Daily
+```
+
+Press `Ctrl+C` to stop.
+
+## Docker Deployment
+
+### Quick Start
+
+```bash
+docker-compose up -d
+```
+
+### First-Run Behavior
+
+On first run, the container:
+1. Creates `data/config.yaml` with placeholder values
+2. Shows error asking you to edit credentials
+3. Waits for valid config (checks every 60 seconds)
+
+**Configure your credentials:**
+
+```bash
+# Edit the auto-created config
+nano data/config.yaml
+```
+
+**Apply changes:**
+- **Fast**: `docker-compose restart`
+- **Auto**: Wait 60 seconds for auto-reload
+
+### Volumes
+
+```yaml
+volumes:
+  - ./data:/app/data  # Contains config.yaml and tokens.json
+```
+
+### Authentication in Docker
+
+When tokens are missing or expired, the container automatically:
+1. Shows OAuth URLs in logs
+2. Waits for you to authorize in browser
+3. Resumes syncing after authentication
+
+**Manual re-auth (if needed):**
+```bash
+docker-compose run --rm sync auth
+```
+
+### Health Check
+
+```bash
+# Check token validity
+docker exec anilist-mal-sync-v2-sync-1 python -m anilist_mal_sync.healthcheck
+
+# View status
+docker ps
 ```
 
 ## Development
@@ -148,6 +237,34 @@ pytest
 black src/ tests/
 ruff check src/ tests/
 ```
+
+**Project Structure:**
+```
+src/anilist_mal_sync/
+├── config.py          # Pydantic-based YAML configuration
+├── cli.py             # Click CLI commands
+├── anilist_client.py  # AniList API client
+├── mal_client.py      # MyAnimeList API client
+├── sync_engine.py     # Sync logic and conflict resolution
+└── oauth.py           # OAuth flow and token management
+```
+
+## Troubleshooting
+
+**Authentication fails:**
+```bash
+rm data/tokens.json
+anilist-mal-sync auth
+```
+
+**Rate limit errors:**
+Wait 60 seconds and retry. The sync engine has built-in rate limiting.
+
+**Config validation errors:**
+Check that:
+- All placeholder values (e.g., "YOUR_CLIENT_ID_HERE") are replaced
+- Client IDs and secrets are correct
+- Usernames match your actual accounts
 
 ## License
 
