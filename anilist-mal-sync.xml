@@ -12,7 +12,7 @@
   <Overview>Bidirectional sync service between AniList and MyAnimeList with OAuth authentication, conflict resolution, and Docker deployment.</Overview>
   <Category>Tools: Status:Stable</Category>
   <WebUI/>
-  <TemplateURL>https://raw.githubusercontent.com/Tareku99/anilist-mal-sync-v2/main/unraid-template.xml</TemplateURL>
+  <TemplateURL>https://raw.githubusercontent.com/Tareku99/anilist-mal-sync-v2/main/anilist-mal-sync.xml</TemplateURL>
   <Icon>https://raw.githubusercontent.com/Tareku99/anilist-mal-sync-v2/main/icon.png</Icon>
   <ExtraParams/>
   <PostArgs/>
