@@ -7,6 +7,16 @@ on:
       - development
     tags:
       - 'v*.*.*'
+  workflow_dispatch:
+    inputs:
+      branch:
+        description: 'Branch to build and push'
+        required: true
+        default: 'main'
+        type: choice
+        options:
+          - main
+          - development
 
 env:
   REGISTRY: ghcr.io
