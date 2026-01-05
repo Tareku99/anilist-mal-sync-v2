@@ -1,5 +1,7 @@
 # AniList ⇄ MyAnimeList Sync
 
+[![Docker](https://img.shields.io/badge/docker-ghcr.io-blue)](https://github.com/Tareku99/anilist-mal-sync-v2/pkgs/container/anilist-mal-sync)
+
 A service to synchronize anime lists between AniList and MyAnimeList with support for bidirectional sync.
 
 ## Features
@@ -170,6 +172,24 @@ anilist-mal-sync run --interval 1440  # Daily
 Press `Ctrl+C` to stop.
 
 ## Docker Deployment
+
+### Using Pre-built Image
+
+```bash
+# Pull the latest image
+docker pull ghcr.io/tareku99/anilist-mal-sync:latest
+
+# Run with docker-compose
+docker-compose up -d
+```
+
+### Building Locally
+
+```bash
+# Uncomment 'build: .' in docker-compose.yml, then:
+docker-compose build
+docker-compose up -d
+```
 
 ### Quick Start
 

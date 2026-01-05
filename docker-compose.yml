@@ -1,7 +1,8 @@
 services:
   sync:
-    build: .
-    image: anilist-mal-sync:latest
+    image: ghcr.io/tareku99/anilist-mal-sync:latest
+    # Uncomment to build locally instead of pulling from registry:
+    # build: .
     volumes:
       - ./data:/app/data
     ports:
