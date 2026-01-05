@@ -68,6 +68,7 @@ class AniListClient:
                 media {
                   id
                   idMal
+                  isFavourite
                   title { romaji english native }
                   episodes
                 }
@@ -90,6 +91,28 @@ class AniListClient:
         logger.info(f"Fetched {len(entries)} anime entries from AniList")
         return entries
 
+    def search_anime(self, title: str, limit: int = 5) -> list[dict]:
+        """Search AniList anime by title to find IDs."""
+        query = """
+        query ($search: String, $limit: Int) {
+            Page(perPage: $limit) {
+                media(search: $search, type: ANIME) {
+                    id
+                    idMal
+                    title { romaji english native }
+                }
+            }
+        }
+        """
+
+        variables = {"search": title, "limit": limit}
+        try:
+            data = self._query(query, variables)
+            return data.get("Page", {}).get("media", [])
+        except Exception as e:
+            logger.error(f"AniList search failed for '{title}': {e}")
+            return []
+
     def _parse_entry(self, entry: dict) -> AnimeEntry:
         """Parse AniList entry to common model."""
         media = entry.get("media", {})
@@ -104,6 +127,12 @@ class AniListClient:
             "DROPPED": WatchStatus.DROPPED,
             "PLANNING": WatchStatus.PLAN_TO_WATCH,
         }
+        
+        # Parse updated_at timestamp (Unix timestamp from AniList)
+        updated_at = None
+        if entry.get("updatedAt"):
+            from datetime import datetime, timezone
+            updated_at = datetime.fromtimestamp(entry["updatedAt"], tz=timezone.utc)
 
         return AnimeEntry(
             anilist_id=media.get("id"),
@@ -115,6 +144,8 @@ class AniListClient:
             total_episodes=media.get("episodes"),
             notes=entry.get("notes"),
             rewatched=entry.get("repeat", 0),
+            is_favorite=media.get("isFavourite", False),
+            updated_at=updated_at,
         )
 
     def update_anime(self, entry: AnimeEntry) -> bool:
@@ -133,8 +164,8 @@ class AniListClient:
         }
 
         mutation = """
-        mutation ($mediaId: Int, $status: MediaListStatus, $score: Float, $progress: Int, $notes: String) {
-          SaveMediaListEntry(mediaId: $mediaId, status: $status, score: $score, progress: $progress, notes: $notes) {
+        mutation ($mediaId: Int, $status: MediaListStatus, $score: Float, $progress: Int, $repeat: Int, $notes: String) {
+          SaveMediaListEntry(mediaId: $mediaId, status: $status, score: $score, progress: $progress, repeat: $repeat, notes: $notes) {
             id
           }
         }
@@ -145,6 +176,7 @@ class AniListClient:
             "status": status_map.get(entry.status),
             "score": entry.score,
             "progress": entry.episodes_watched,
+            "repeat": entry.rewatched,
             "notes": entry.notes,
         }
 

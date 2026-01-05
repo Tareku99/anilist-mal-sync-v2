@@ -30,7 +30,7 @@ class MALClient:
         entries = []
         url = f"{self.BASE_URL}/users/{username}/animelist"
         params = {
-            "fields": "list_status,num_episodes,alternative_titles",
+              "fields": "list_status{updated_at},num_episodes,alternative_titles",
             "limit": 1000,
         }
 
@@ -67,6 +67,12 @@ class MALClient:
         score = list_status.get("score")
         if score is not None:
             score = float(score)
+        
+            # Parse updated_at timestamp
+            updated_at = None
+            if list_status.get("updated_at"):
+                from datetime import datetime
+                updated_at = datetime.fromisoformat(list_status["updated_at"].replace("Z", "+00:00"))
 
         return AnimeEntry(
             mal_id=node.get("id"),
@@ -77,10 +83,14 @@ class MALClient:
             total_episodes=node.get("num_episodes"),
             notes=list_status.get("comments"),
             rewatched=list_status.get("num_times_rewatched", 0),
+            is_favorite=list_status.get("is_favoriting", False),
+            updated_at=updated_at,
         )
 
     def update_anime(self, entry: AnimeEntry) -> bool:
         """Update an anime entry on MyAnimeList."""
+        from .config import get_settings
+        
         if not entry.mal_id:
             logger.warning(f"Cannot update MAL entry without mal_id: {entry.title}")
             return False
@@ -100,11 +110,21 @@ class MALClient:
             "num_watched_episodes": entry.episodes_watched,
         }
 
-        if entry.score is not None:
-            data["score"] = int(entry.score)  # MAL expects integer
+        # Handle score syncing based on configuration
+        settings = get_settings()
+        if entry.score is not None and settings.score_sync_mode == "auto":
+            # Normalize score: AniList can use 100-point scale, MAL only accepts 0-10
+            normalized_score = entry.score
+            if normalized_score > 10:
+                normalized_score = normalized_score / 10.0
+            data["score"] = int(round(normalized_score))  # MAL expects 0-10 integer
+        # If score_sync_mode == "disabled", skip score field entirely
 
         if entry.notes:
             data["comments"] = entry.notes
+        
+        if entry.rewatched > 0:
+            data["num_times_rewatched"] = entry.rewatched
 
         try:
             response = self.session.patch(url, data=data)

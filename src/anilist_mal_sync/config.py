@@ -51,6 +51,9 @@ class Settings(BaseSettings):
     sync_mode: Literal["anilist-to-mal", "mal-to-anilist", "bidirectional"] = Field(
         default="bidirectional", alias="SYNC_MODE"
     )
+    score_sync_mode: Literal["auto", "disabled"] = Field(
+        default="auto", alias="SCORE_SYNC_MODE"
+    )
     dry_run: bool = Field(default=False, alias="DRY_RUN")
     log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR"] = Field(
         default="INFO", alias="LOG_LEVEL"

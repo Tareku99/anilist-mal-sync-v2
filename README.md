@@ -108,6 +108,7 @@ MAL_USERNAME=your_username
 
 # Sync Options (optional - defaults provided)
 SYNC_MODE=bidirectional
+SCORE_SYNC_MODE=auto  # auto: normalize scores (AniList 100-point → MAL 0-10), disabled: don't sync scores
 DRY_RUN=false
 LOG_LEVEL=INFO
 

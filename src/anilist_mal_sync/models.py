@@ -27,7 +27,7 @@ class AnimeEntry(BaseModel):
 
     # Watch data
     status: WatchStatus
-    score: Optional[float] = Field(None, ge=0, le=10)
+    score: Optional[float] = Field(None, ge=0)  # AniList allows 0-100, MAL allows 0-10
     episodes_watched: int = Field(default=0, ge=0)
     total_episodes: Optional[int] = None
 
@@ -39,6 +39,7 @@ class AnimeEntry(BaseModel):
     # Additional metadata
     notes: Optional[str] = None
     rewatched: int = Field(default=0, ge=0)
+    is_favorite: bool = Field(default=False)
 
 
 class SyncResult(BaseModel):

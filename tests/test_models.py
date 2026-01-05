@@ -22,19 +22,27 @@ def test_anime_entry_creation():
 
 
 def test_score_validation():
-    """Test score validation (0-10 range)."""
-    # Valid score
+    """Test score validation (allows AniList 100-point scale)."""
+    # Valid 10-point score
     entry = AnimeEntry(
         title="Test",
         status=WatchStatus.WATCHING,
         score=8.5,
     )
     assert entry.score == 8.5
+    
+    # Valid 100-point score (AniList format)
+    entry_100 = AnimeEntry(
+        title="Test",
+        status=WatchStatus.WATCHING,
+        score=85.0,
+    )
+    assert entry_100.score == 85.0
 
-    # Invalid score should raise validation error
+    # Invalid negative score should raise validation error
     with pytest.raises(Exception):
         AnimeEntry(
             title="Test",
             status=WatchStatus.WATCHING,
-            score=11.0,  # Out of range
+            score=-1,
         )
