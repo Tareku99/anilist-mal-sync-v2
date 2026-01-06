@@ -3,25 +3,28 @@
 import logging
 from typing import Optional
 
-import requests
-
+from .base_client import BaseAPIClient
 from .models import AnimeEntry, WatchStatus
 
 logger = logging.getLogger(__name__)
 
+# HTTP Status Code Constants
+HTTP_OK = 200
+HTTP_UNAUTHORIZED = 401
+HTTP_FORBIDDEN = 403
 
-class AniListClient:
+
+class AniListClient(BaseAPIClient):
     """Client for AniList GraphQL API."""
 
     BASE_URL = "https://graphql.anilist.co"
 
     def __init__(self, access_token: str):
         """Initialize AniList client with access token."""
-        self.access_token = access_token
-        self.session = requests.Session()
-        self.session.headers.update(
-            {
-                "Authorization": f"Bearer {access_token}",
+        super().__init__(
+            access_token=access_token,
+            base_url=self.BASE_URL,
+            headers={
                 "Content-Type": "application/json",
                 "Accept": "application/json",
             }
@@ -33,11 +36,13 @@ class AniListClient:
         if variables:
             payload["variables"] = variables
 
-        response = self.session.post(self.BASE_URL, json=payload)
-        
-        if response.status_code != 200:
-            logger.error(f"AniList API error: {response.status_code}")
-            logger.error(f"Response: {response.text}")
+        response = self.session.post(self.base_url, json=payload)
+
+        if response.status_code != HTTP_OK:
+            self._handle_auth_error(response, "AniList")
+            if response.status_code not in (HTTP_UNAUTHORIZED, HTTP_FORBIDDEN):
+                logger.error(f"AniList API error: {response.status_code}")
+                logger.error(f"Response: {response.text}")
         
         response.raise_for_status()
 

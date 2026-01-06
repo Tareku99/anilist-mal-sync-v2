@@ -3,32 +3,25 @@
 import logging
 from typing import Optional
 
-import requests
-
+from .base_client import BaseAPIClient
 from .models import AnimeEntry, WatchStatus
 
 logger = logging.getLogger(__name__)
 
 
-class MALClient:
+class MALClient(BaseAPIClient):
     """Client for MyAnimeList API v2."""
 
     BASE_URL = "https://api.myanimelist.net/v2"
 
     def __init__(self, access_token: str):
         """Initialize MAL client with access token."""
-        self.access_token = access_token
-        self.session = requests.Session()
-        self.session.headers.update(
-            {
-                "Authorization": f"Bearer {access_token}",
-            }
-        )
+        super().__init__(access_token=access_token, base_url=self.BASE_URL)
 
     def get_user_anime_list(self, username: str = "@me") -> list[AnimeEntry]:
         """Fetch user's anime list from MyAnimeList."""
         entries = []
-        url = f"{self.BASE_URL}/users/{username}/animelist"
+        url = f"{self.base_url}/users/{username}/animelist"
         params = {
               "fields": "list_status{updated_at},num_episodes,alternative_titles",
             "limit": 1000,
@@ -36,6 +29,7 @@ class MALClient:
 
         while url:
             response = self.session.get(url, params=params)
+            self._handle_auth_error(response, "MyAnimeList")
             response.raise_for_status()
             data = response.json()
 
@@ -104,7 +98,7 @@ class MALClient:
             WatchStatus.PLAN_TO_WATCH: "plan_to_watch",
         }
 
-        url = f"{self.BASE_URL}/anime/{entry.mal_id}/my_list_status"
+        url = f"{self.base_url}/anime/{entry.mal_id}/my_list_status"
         data = {
             "status": status_map.get(entry.status),
             "num_watched_episodes": entry.episodes_watched,
@@ -128,6 +122,7 @@ class MALClient:
 
         try:
             response = self.session.patch(url, data=data)
+            self._handle_auth_error(response, "MyAnimeList")
             response.raise_for_status()
             logger.info(f"Updated MAL entry: {entry.title}")
             return True
@@ -137,7 +132,7 @@ class MALClient:
 
     def search_anime(self, title: str, limit: int = 5) -> list[dict]:
         """Search for anime by title to find MAL ID."""
-        url = f"{self.BASE_URL}/anime"
+        url = f"{self.base_url}/anime"
         params = {"q": title, "limit": limit}
 
         try:

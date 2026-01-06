@@ -34,8 +34,8 @@ ENV/
 *~
 
 # Environment and secrets
-.env
-.tokens.json
+config.yaml
+tokens.json
 *.log
 
 # Testing

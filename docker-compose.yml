@@ -1,12 +1,25 @@
-version: '3.8'
-
 services:
   sync:
-    build: .
-    image: anilist-mal-sync:latest
-    env_file:
-      - .env
+    image: ghcr.io/tareku99/anilist-mal-sync:latest
+    # Uncomment to build locally instead of pulling from registry:
+    # build: .
     volumes:
       - ./data:/app/data
-    command: sync --mode ${SYNC_MODE:-bidirectional}
+    ports:
+      - "18080:18080"  # OAuth callback port
+    environment:
+      - TZ=UTC  # Change to your timezone (e.g., America/New_York, Europe/London)
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-m", "anilist_mal_sync.healthcheck"]
+      interval: 5m
+      timeout: 10s
+      start_period: 10s
+      retries: 3
+    # Exit code 2 = auth required, don't restart on auth failures
+    # This prevents restart loops when tokens expire
+    deploy:
+      restart_policy:
+        condition: on-failure
+        max_attempts: 3
+
