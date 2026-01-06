@@ -6,7 +6,7 @@ A service to synchronize anime lists between AniList and MyAnimeList with suppor
 
 ## Credits
 
-Inspired by the original idea from [bigspawn/anilist-mal-sync](https://github.com/bigspawn/anilist-mal-sync).
+Inspired by the original idea from [bigspawn/anilist-mal-sync](https://github.com/bigspawn/anilist-mal-sync).<br>
 This is a clean-room rewrite in Python with a fresh codebase and architecture.
 
 ## Features
