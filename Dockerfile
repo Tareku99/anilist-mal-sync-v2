@@ -10,10 +10,6 @@ COPY config.example.yaml ./
 # Install dependencies
 RUN pip install --no-cache-dir -e .
 
-# Create non-root user
-RUN useradd -m -u 1000 syncuser && chown -R syncuser:syncuser /app
-USER syncuser
-
 # Create volume for token storage
 VOLUME ["/app/data"]
 
