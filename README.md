@@ -1,8 +1,13 @@
 # AniList ⇄ MyAnimeList Sync
 
-[![Docker](https://img.shields.io/badge/docker-ghcr.io-blue)](https://github.com/Tareku99/anilist-mal-sync-v2/pkgs/container/anilist-mal-sync)
+[![Docker](https://img.shields.io/badge/docker-ghcr.io-blue)](https://github.com/Tareku99/anilist-mal-sync/pkgs/container/anilist-mal-sync)
 
 A service to synchronize anime lists between AniList and MyAnimeList with support for bidirectional sync.
+
+## Credits
+
+Inspired by the original idea from [bigspawn/anilist-mal-sync](https://github.com/bigspawn/anilist-mal-sync).
+This is a clean-room rewrite in Python with a fresh codebase and architecture.
 
 ## Features
 
@@ -238,7 +243,7 @@ docker-compose run --rm sync auth
 
 ```bash
 # Check token validity
-docker exec anilist-mal-sync-v2-sync-1 python -m anilist_mal_sync.healthcheck
+docker exec anilist-mal-sync-sync-1 python -m anilist_mal_sync.healthcheck
 
 # View status
 docker ps
