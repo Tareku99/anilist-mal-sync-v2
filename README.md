@@ -18,6 +18,13 @@ This is a clean-room rewrite in Python with a fresh codebase and architecture.
 - **YAML-based configuration** with validation
 - **Rate limiting** and automatic retry logic
 
+### Planned Features
+
+- Manga sync support
+- Custom sync schedules per list type
+- Webhooks for sync notifications
+- Web UI for configuration and monitoring
+
 ## Quick Start (Deployment)
 
 ### 1. Get API Credentials
