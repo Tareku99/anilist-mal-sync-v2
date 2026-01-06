@@ -409,7 +409,8 @@ def run(mode: str, interval: int, log_level: str, wait_for_config: bool):
         
         logger.info("")
         logger.info(f"Waiting {interval} minutes until next sync...")
-        logger.info(f"Next sync at: {time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(time.time() + interval_seconds))}")
+        next_sync_time = time.localtime(time.time() + interval_seconds)
+        logger.info(f"Next sync at: {time.strftime('%Y-%m-%d %H:%M:%S %Z', next_sync_time)}")
         logger.info("")
         
         try:

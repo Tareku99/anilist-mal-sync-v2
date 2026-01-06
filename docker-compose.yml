@@ -7,6 +7,8 @@ services:
       - ./data:/app/data
     ports:
       - "18080:18080"  # OAuth callback port
+    environment:
+      - TZ=UTC  # Change to your timezone (e.g., America/New_York, Europe/London)
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "python", "-m", "anilist_mal_sync.healthcheck"]
