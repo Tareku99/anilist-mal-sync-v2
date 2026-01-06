@@ -424,5 +424,138 @@ def run(mode: str, interval: int, log_level: str, wait_for_config: bool):
             sys.exit(0)
 
 
+@main.command()
+@click.option(
+    "--mode",
+    type=click.Choice(["anilist-to-mal", "mal-to-anilist", "bidirectional"]),
+    default="bidirectional",
+    help="Sync mode: one-way or bidirectional",
+)
+@click.option(
+    "--interval",
+    type=int,
+    default=DEFAULT_SYNC_INTERVAL_MINUTES,
+    help="Minutes between syncs",
+)
+@click.option(
+    "--log-level",
+    type=click.Choice(["DEBUG", "INFO", "WARNING", "ERROR"]),
+    default="INFO",
+    help="Logging level",
+)
+@click.option(
+    "--port",
+    type=int,
+    default=8080,
+    help="Web UI port",
+)
+@click.option(
+    "--host",
+    type=str,
+    default="0.0.0.0",
+    help="Web UI host",
+)
+def web(mode: str, interval: int, log_level: str, port: int, host: str):
+    """Run sync service with web UI."""
+    import asyncio
+    import threading
+    import uvicorn
+    from .web import app, update_sync_status
+    
+    settings = get_settings()
+    setup_logging(log_level or settings.log_level)
+    
+    logger.info("="*60)
+    logger.info("AniList-MAL Sync - Web UI Mode")
+    logger.info("="*60)
+    logger.info(f"Web UI: http://localhost:{port}")
+    logger.info(f"Sync Mode: {mode}")
+    logger.info(f"Sync Interval: {interval} minutes")
+    logger.info("="*60)
+    logger.info("")
+    
+    # Validate credentials are not placeholders
+    _require_valid_config()
+    
+    # Override settings with CLI args
+    mode_override = mode
+    interval_seconds = interval * 60
+    
+    # Start sync service in background thread
+    def sync_service():
+        run_count = 0
+        update_sync_status(running=True)
+        
+        while True:
+            run_count += 1
+            logger.info(f"Starting sync run #{run_count}...")
+            
+            import click
+            ctx = click.Context(sync)
+            ctx.params = {
+                'mode': mode_override,
+                'dry_run': False,
+                'log_level': log_level
+            }
+            
+            try:
+                with ctx:
+                    sync.invoke(ctx)
+                logger.info(f"Sync run #{run_count} completed successfully")
+                update_sync_status(
+                    running=True,
+                    last_sync=time.strftime('%Y-%m-%d %H:%M:%S %Z'),
+                    last_result="Success"
+                )
+            except SystemExit as e:
+                result = "Success" if e.code == 0 else f"Failed (exit {e.code})"
+                update_sync_status(
+                    running=True,
+                    last_sync=time.strftime('%Y-%m-%d %H:%M:%S %Z'),
+                    last_result=result
+                )
+                if e.code == 0:
+                    logger.info(f"Sync run #{run_count} completed successfully")
+                else:
+                    logger.error(f"Sync run #{run_count} failed with exit code {e.code}")
+            except Exception as e:
+                logger.error(f"Sync run #{run_count} failed: {e}")
+                update_sync_status(
+                    running=True,
+                    last_sync=time.strftime('%Y-%m-%d %H:%M:%S %Z'),
+                    last_result=f"Error: {str(e)}"
+                )
+            
+            logger.info("")
+            logger.info(f"Waiting {interval} minutes until next sync...")
+            next_sync_time = time.localtime(time.time() + interval_seconds)
+            next_sync_str = time.strftime('%Y-%m-%d %H:%M:%S %Z', next_sync_time)
+            logger.info(f"Next sync at: {next_sync_str}")
+            update_sync_status(next_sync=next_sync_str)
+            logger.info("")
+            
+            try:
+                time.sleep(interval_seconds)
+            except KeyboardInterrupt:
+                update_sync_status(running=False)
+                logger.info("Sync service stopped")
+                break
+    
+    # Start sync thread
+    sync_thread = threading.Thread(target=sync_service, daemon=True)
+    sync_thread.start()
+    
+    # Run FastAPI server (this blocks)
+    try:
+        uvicorn.run(app, host=host, port=port, log_level="warning")
+    except KeyboardInterrupt:
+        update_sync_status(running=False)
+        logger.info("")
+        logger.info("="*60)
+        logger.info("Web UI stopped by user")
+        logger.info("="*60)
+        sys.exit(0)
+
+
 if __name__ == "__main__":
     main()
