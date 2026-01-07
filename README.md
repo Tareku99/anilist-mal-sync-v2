@@ -17,6 +17,7 @@ This is a clean-room rewrite in Python with a fresh codebase and architecture.
 - **Docker deployment** with auto-configuration
 - **YAML-based configuration** with validation
 - **Rate limiting** and automatic retry logic
+- **Web UI** for monitoring and configuration
 
 ### Planned Features
 
@@ -103,6 +104,20 @@ Restart: `docker-compose restart` (or wait 60s for auto-reload)
 ### 4. Authenticate
 
 Check container logs for OAuth URLs, open them in your browser to authorize, and the service will start syncing automatically.
+
+### 5. Access Web UI
+
+Once running, access the web dashboard at:
+
+```
+http://YOUR-SERVER-IP:8080
+```
+
+The web UI provides:
+- **Real-time status**: View current sync status, last sync time, next scheduled sync
+- **Configuration editor**: Edit config.yaml directly from the browser with validation
+- **Manual sync trigger**: Force an immediate sync without waiting for the schedule
+- **Live monitoring**: See total sync count and last result
 
 ---
 
