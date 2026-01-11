@@ -378,14 +378,46 @@ def run(mode: str, interval: int, log_level: str, wait_for_config: bool):
     logger.info("="*60)
     logger.info("")
     
+    import os
+    from pathlib import Path
+    from .config import reload_settings
     run_count = 0
+    config_path = Path("/app/data/config.yaml") if os.path.exists("/.dockerenv") else Path("data/config.yaml")
+    last_mtime = None
+    config_valid = True
     
     while True:
+        # Check config file modification time
+        try:
+            mtime = config_path.stat().st_mtime
+        except Exception:
+            mtime = None
+        # If config changed or first run, reload and validate
+        if last_mtime != mtime:
+            last_mtime = mtime
+            try:
+                _ = reload_settings()
+                is_valid, invalid_vars = validate_credentials()
+                if is_valid:
+                    if not config_valid:
+                        logger.info("✅ Configuration validated successfully! Resuming sync service...")
+                    config_valid = True
+                else:
+                    logger.error("")
+                    _show_config_error(invalid_vars, str(config_path), exit_code=None)
+                    logger.error("")
+                    logger.error("❌ Configuration invalid. Pausing sync. Waiting for fix...")
+                    config_valid = False
+            except Exception as e:
+                logger.error(f"❌ Failed to load config: {e}")
+                logger.error("❌ Configuration invalid. Pausing sync. Waiting for fix...")
+                config_valid = False
+        # If config is invalid, wait and retry
+        if not config_valid:
+            time.sleep(10)
+            continue
         run_count += 1
         logger.info(f"Starting sync run #{run_count}...")
-        
-        # Config is loaded at module import from config.yaml
-        
         # Directly invoke sync function (no CliRunner isolation)
         import click
         ctx = click.Context(sync)
@@ -394,7 +426,6 @@ def run(mode: str, interval: int, log_level: str, wait_for_config: bool):
             'dry_run': False,
             'log_level': log_level
         }
-        
         try:
             with ctx:
                 sync.invoke(ctx)
@@ -406,13 +437,11 @@ def run(mode: str, interval: int, log_level: str, wait_for_config: bool):
                 logger.error(f"Sync run #{run_count} failed with exit code {e.code}")
         except Exception as e:
             logger.error(f"Sync run #{run_count} failed: {e}")
-        
         logger.info("")
         logger.info(f"Waiting {interval} minutes until next sync...")
         next_sync_time = time.localtime(time.time() + interval_seconds)
         logger.info(f"Next sync at: {time.strftime('%Y-%m-%d %H:%M:%S %Z', next_sync_time)}")
         logger.info("")
-        
         try:
             time.sleep(interval_seconds)
         except KeyboardInterrupt:

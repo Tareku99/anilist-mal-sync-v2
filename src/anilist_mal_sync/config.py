@@ -177,6 +177,19 @@ def validate_credentials() -> tuple[bool, list[str]]:
     return len(missing_or_invalid) == 0, missing_or_invalid
 
 
+
+# Singleton cache for settings
+_SETTINGS_SINGLETON = None
+
 def get_settings() -> Settings:
-    """Get application settings singleton."""
-    return Settings()
+    """Get (cached) application settings singleton."""
+    global _SETTINGS_SINGLETON
+    if _SETTINGS_SINGLETON is None:
+        _SETTINGS_SINGLETON = Settings()
+    return _SETTINGS_SINGLETON
+
+def reload_settings() -> Settings:
+    """Force reload of application settings singleton."""
+    global _SETTINGS_SINGLETON
+    _SETTINGS_SINGLETON = Settings()
+    return _SETTINGS_SINGLETON
