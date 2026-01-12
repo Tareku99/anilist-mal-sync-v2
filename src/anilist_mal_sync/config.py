@@ -105,8 +105,8 @@ class Settings:
         example_path = Path("config.example.yaml")
         if example_path.exists():
             shutil.copy(example_path, self.config_path)
-            logger.info(f"✅ Created config template: {self.config_path}")
-            logger.info("📝 Please edit the config file with your credentials")
+            logger.info(f"[OK] Created config template: {self.config_path}")
+            logger.info("[INFO] Please edit the config file with your credentials")
     
     def _load_config(self) -> None:
         """Load configuration from YAML using Pydantic."""
@@ -115,7 +115,7 @@ class Settings:
                 raw_config = yaml.safe_load(f) or {}
             
             config = Config(**raw_config)
-            logger.info(f"✅ Loaded configuration from {self.config_path}")
+            logger.info(f"[OK] Loaded configuration from {self.config_path}")
             
             # Map to attributes for backward compatibility
             self.oauth_port = config.oauth.port
@@ -149,7 +149,7 @@ class Settings:
             self._set_env_vars()
         
         except Exception as e:
-            logger.error(f"❌ Failed to load config: {e}")
+            logger.error(f"[ERROR] Failed to load config: {e}")
             raise
     
     def _set_env_vars(self) -> None:

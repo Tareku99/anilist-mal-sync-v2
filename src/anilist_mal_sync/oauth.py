@@ -331,7 +331,7 @@ def run_oauth_flow(service: str, settings: Settings, token_manager: TokenManager
         auth_url, expected_state, code_verifier = oauth.get_authorization_url()
 
     # Open browser for user authorization
-    print(f"\n🔐 Opening browser for {service.upper()} authorization...")
+    print(f"\n[INFO] Opening browser for {service.upper()} authorization...")
     print(f"If the browser doesn't open, visit this URL:\n{auth_url}\n")
     webbrowser.open(auth_url)
 
@@ -370,7 +370,7 @@ def run_oauth_flow(service: str, settings: Settings, token_manager: TokenManager
         # Save tokens with expiry
         token_manager.set_tokens(service, access_token, refresh_token, expires_in)
         
-        print(f"✅ Successfully authenticated with {service.upper()}!")
+        print(f"[OK] Successfully authenticated with {service.upper()}!")
         return True
 
     except Exception as e:

@@ -62,11 +62,11 @@ class MALClient(BaseAPIClient):
         if score is not None:
             score = float(score)
         
-            # Parse updated_at timestamp
-            updated_at = None
-            if list_status.get("updated_at"):
-                from datetime import datetime
-                updated_at = datetime.fromisoformat(list_status["updated_at"].replace("Z", "+00:00"))
+        # Parse updated_at timestamp
+        updated_at = None
+        if list_status.get("updated_at"):
+            from datetime import datetime
+            updated_at = datetime.fromisoformat(list_status["updated_at"].replace("Z", "+00:00"))
 
         return AnimeEntry(
             mal_id=node.get("id"),
