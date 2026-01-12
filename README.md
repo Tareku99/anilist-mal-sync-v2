@@ -274,20 +274,20 @@ flowchart TD
     PrintResults --> ExitOnce[Exit 0 or 1]
     WaitInterval --> ConfigCheck
     
-    style ExecuteSync fill:#f3e5f5
-    style ExecuteSyncLoop fill:#f3e5f5
-    style TokenSyncDetails fill:#f3e5f5
+    style ExecuteSync fill:#0969da,stroke:#0550ae,stroke-width:2px,color:#fff
+    style ExecuteSyncLoop fill:#0969da,stroke:#0550ae,stroke-width:2px,color:#fff
+    style TokenSyncDetails fill:#0969da,stroke:#0550ae,stroke-width:2px,color:#fff
     
-    style Start fill:#e1f5ff
-    style Init fill:#fff4e1
-    style ConfigCheck fill:#fff4e1
-    style ConfigValidate fill:#fff4e1
-    style AuthFlow fill:#e8f5e9
-    style MainLoop fill:#fce4ec
-    style WebUIStart fill:#e1f5ff
-    style RunModeCheck fill:#fff4e1
-    style WaitLoop fill:#fff4e1
-    style ExitOnce fill:#ffebee
+    style Start fill:#1f883d,stroke:#1a7f37,stroke-width:2px,color:#fff
+    style Init fill:#9a6700,stroke:#7c4a00,stroke-width:2px,color:#fff
+    style ConfigCheck fill:#9a6700,stroke:#7c4a00,stroke-width:2px,color:#fff
+    style ConfigValidate fill:#9a6700,stroke:#7c4a00,stroke-width:2px,color:#fff
+    style AuthFlow fill:#1f883d,stroke:#1a7f37,stroke-width:2px,color:#fff
+    style MainLoop fill:#cf222e,stroke:#a40e26,stroke-width:2px,color:#fff
+    style WebUIStart fill:#0969da,stroke:#0550ae,stroke-width:2px,color:#fff
+    style RunModeCheck fill:#9a6700,stroke:#7c4a00,stroke-width:2px,color:#fff
+    style WaitLoop fill:#bc4c00,stroke:#953800,stroke-width:2px,color:#fff
+    style ExitOnce fill:#82071e,stroke:#660018,stroke-width:2px,color:#fff
 ```
 
 ### Token Loading & Sync Execution
@@ -328,13 +328,13 @@ flowchart TD
     RetrySync -->|Success| ReturnSuccess
     RetrySync -->|Fail| ReturnError
     
-    style TokenSyncFlow fill:#e1f5ff
-    style TokenLoad fill:#f3e5f5
-    style ClientCreate fill:#f3e5f5
-    style SyncExecute fill:#f3e5f5
-    style ReturnSuccess fill:#e8f5e9
-    style ReturnError fill:#ffebee
-    style ExitAuth fill:#ffebee
+    style TokenSyncFlow fill:#0969da,stroke:#0550ae,stroke-width:2px,color:#fff
+    style TokenLoad fill:#0969da,stroke:#0550ae,stroke-width:2px,color:#fff
+    style ClientCreate fill:#0969da,stroke:#0550ae,stroke-width:2px,color:#fff
+    style SyncExecute fill:#0969da,stroke:#0550ae,stroke-width:2px,color:#fff
+    style ReturnSuccess fill:#1f883d,stroke:#1a7f37,stroke-width:2px,color:#fff
+    style ReturnError fill:#cf222e,stroke:#a40e26,stroke-width:2px,color:#fff
+    style ExitAuth fill:#cf222e,stroke:#a40e26,stroke-width:2px,color:#fff
 ```
 
 **Key Behaviors:**
@@ -424,3 +424,11 @@ Contributions are welcome! Please see [CONTRIBUTING.md](CONTRIBUTING.md) for gui
 - **[SECURITY.md](SECURITY.md)** - Security policy and vulnerability reporting
 - **[CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md)** - Community guidelines
 - **[LICENSE](LICENSE)** - MIT License
+
+## Support the Project
+
+If you find this project useful, consider supporting its development:
+
+[![Ko-fi](https://img.shields.io/badge/Ko--fi-F16061?style=for-the-badge&logo=ko-fi&logoColor=white)](https://ko-fi.com/tareku)
+
+[Buy me a coffee on Ko-fi](https://ko-fi.com/tareku) ☕
