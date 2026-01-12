@@ -17,6 +17,13 @@ class MALClient(BaseAPIClient):
     def __init__(self, access_token: str):
         """Initialize MAL client with access token."""
         super().__init__(access_token=access_token, base_url=self.BASE_URL)
+    
+    @staticmethod
+    def _safe_title(title: str) -> str:
+        """Return a console-safe title string (avoid encoding errors on Windows)."""
+        if not title:
+            return ""
+        return title.encode("ascii", "replace").decode("ascii")
 
     def get_user_anime_list(self, username: str = "@me") -> list[AnimeEntry]:
         """Fetch user's anime list from MyAnimeList."""
@@ -86,7 +93,7 @@ class MALClient(BaseAPIClient):
         from .config import get_settings
         
         if not entry.mal_id:
-            logger.warning(f"Cannot update MAL entry without mal_id: {entry.title}")
+            logger.warning(f"Cannot update MAL entry without mal_id: {self._safe_title(entry.title)}")
             return False
 
         # Reverse map status
@@ -124,10 +131,10 @@ class MALClient(BaseAPIClient):
             response = self.session.patch(url, data=data)
             self._handle_auth_error(response, "MyAnimeList")
             response.raise_for_status()
-            logger.info(f"Updated MAL entry: {entry.title}")
+            logger.info(f"Updated MAL entry: {self._safe_title(entry.title)}")
             return True
         except Exception as e:
-            logger.error(f"Failed to update MAL entry {entry.title}: {e}")
+            logger.error(f"Failed to update MAL entry {self._safe_title(entry.title)}: {e}")
             return False
 
     def search_anime(self, title: str, limit: int = 5) -> list[dict]:

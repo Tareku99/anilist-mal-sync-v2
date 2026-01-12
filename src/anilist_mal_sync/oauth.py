@@ -337,7 +337,7 @@ def run_oauth_flow(service: str, settings: Settings, token_manager: TokenManager
 
     # Start local HTTP server to receive callback
     server = HTTPServer(("", settings.oauth_port), OAuthCallbackHandler)
-    print(f"⏳ Waiting for authorization callback on port {settings.oauth_port}...")
+    print(f"[INFO] Waiting for authorization callback on port {settings.oauth_port}...")
     
     # Handle one request (the callback)
     server.handle_request()
