@@ -17,6 +17,13 @@ class MALClient(BaseAPIClient):
     def __init__(self, access_token: str):
         """Initialize MAL client with access token."""
         super().__init__(access_token=access_token, base_url=self.BASE_URL)
+    
+    @staticmethod
+    def _safe_title(title: str) -> str:
+        """Return a console-safe title string (avoid encoding errors on Windows)."""
+        if not title:
+            return ""
+        return title.encode("ascii", "replace").decode("ascii")
 
     def get_user_anime_list(self, username: str = "@me") -> list[AnimeEntry]:
         """Fetch user's anime list from MyAnimeList."""
@@ -62,11 +69,11 @@ class MALClient(BaseAPIClient):
         if score is not None:
             score = float(score)
         
-            # Parse updated_at timestamp
-            updated_at = None
-            if list_status.get("updated_at"):
-                from datetime import datetime
-                updated_at = datetime.fromisoformat(list_status["updated_at"].replace("Z", "+00:00"))
+        # Parse updated_at timestamp
+        updated_at = None
+        if list_status.get("updated_at"):
+            from datetime import datetime
+            updated_at = datetime.fromisoformat(list_status["updated_at"].replace("Z", "+00:00"))
 
         return AnimeEntry(
             mal_id=node.get("id"),
@@ -86,7 +93,7 @@ class MALClient(BaseAPIClient):
         from .config import get_settings
         
         if not entry.mal_id:
-            logger.warning(f"Cannot update MAL entry without mal_id: {entry.title}")
+            logger.warning(f"Cannot update MAL entry without mal_id: {self._safe_title(entry.title)}")
             return False
 
         # Reverse map status
@@ -124,10 +131,10 @@ class MALClient(BaseAPIClient):
             response = self.session.patch(url, data=data)
             self._handle_auth_error(response, "MyAnimeList")
             response.raise_for_status()
-            logger.info(f"Updated MAL entry: {entry.title}")
+            logger.info(f"Updated MAL entry: {self._safe_title(entry.title)} (episodes: {entry.episodes_watched})")
             return True
         except Exception as e:
-            logger.error(f"Failed to update MAL entry {entry.title}: {e}")
+            logger.error(f"Failed to update MAL entry {self._safe_title(entry.title)}: {e}")
             return False
 
     def search_anime(self, title: str, limit: int = 5) -> list[dict]:

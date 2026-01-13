@@ -140,7 +140,7 @@ class SyncEngine:
                         logger.debug(f"  -> MAL entry not found in dict, will update")
                     elif not self._needs_update(entry, target_entry, score_mode):
                         summary["skipped_unchanged"] += 1
-                        logger.info(f"No changes for {self._safe_title(entry.title)}, skipping")
+                        logger.debug(f"No changes for {self._safe_title(entry.title)}, skipping")
                         continue
                     else:
                         logger.debug(f"  -> Will update (changes detected)")
@@ -177,7 +177,7 @@ class SyncEngine:
                         logger.debug(f"  -> AniList entry not found in dict, will update")
                     elif not self._needs_update(entry, target_entry, score_mode):
                         summary["skipped_unchanged"] += 1
-                        logger.info(f"No changes for {self._safe_title(entry.title)}, skipping")
+                        logger.debug(f"No changes for {self._safe_title(entry.title)}, skipping")
                         continue
                     else:
                         logger.debug(f"  -> Will update (changes detected)")
@@ -230,7 +230,7 @@ class SyncEngine:
                 if anilist_entry and not mal_entry:
                     # Only on AniList, add to MAL
                     if self.dry_run:
-                        logger.info(f"[DRY RUN] Would add to MAL: {anilist_entry.title}")
+                        logger.info(f"[DRY RUN] Would add to MAL: {self._safe_title(anilist_entry.title)}")
                     else:
                         self.mal.update_anime(anilist_entry)
                     result.entries_synced += 1
@@ -238,15 +238,18 @@ class SyncEngine:
                 elif mal_entry and not anilist_entry:
                     # Only on MAL, add to AniList
                     if self.dry_run:
-                        logger.info(f"[DRY RUN] Would add to AniList: {mal_entry.title}")
+                        logger.info(f"[DRY RUN] Would add to AniList: {self._safe_title(mal_entry.title)}")
                     else:
                         self.anilist.update_anime(mal_entry)
                     result.entries_synced += 1
 
                 elif anilist_entry and mal_entry:
                     # On both, resolve conflicts
-                    self._resolve_conflict(anilist_entry, mal_entry)
-                    result.entries_synced += 1
+                    if self._resolve_conflict(anilist_entry, mal_entry):
+                        result.entries_synced += 1
+                    else:
+                        result.entries_failed += 1
+                        result.errors.append(f"MAL ID {mal_id}: Failed to sync conflict")
 
             except Exception as e:
                 logger.error(f"Error in bidirectional sync for MAL ID {mal_id}: {e}")
@@ -256,38 +259,50 @@ class SyncEngine:
         result.success = result.entries_failed == 0
         return result
 
-    def _resolve_conflict(self, anilist_entry: AnimeEntry, mal_entry: AnimeEntry):
-        """Resolve conflicts between AniList and MAL entries (latest update wins)."""
+    def _resolve_conflict(self, anilist_entry: AnimeEntry, mal_entry: AnimeEntry) -> bool:
+        """Resolve conflicts between AniList and MAL entries (latest update wins).
+        
+        Returns:
+            bool: True if sync was successful or no sync needed, False if sync failed.
+        """
         # Use timestamps to determine which entry is newer
         if anilist_entry.updated_at and mal_entry.updated_at:
             if anilist_entry.updated_at > mal_entry.updated_at:
-                logger.info(
-                    f"AniList has newer update for {anilist_entry.title} "
+                logger.debug(
+                    f"AniList has newer update for {self._safe_title(anilist_entry.title)} "
                     f"(AL: {anilist_entry.updated_at}, MAL: {mal_entry.updated_at}), syncing to MAL"
                 )
-                if not self.dry_run:
-                    self.mal.update_anime(anilist_entry)
+                if self.dry_run:
+                    return True
+                return self.mal.update_anime(anilist_entry)
             elif mal_entry.updated_at > anilist_entry.updated_at:
-                logger.info(
-                    f"MAL has newer update for {mal_entry.title} "
+                logger.debug(
+                    f"MAL has newer update for {self._safe_title(mal_entry.title)} "
                     f"(MAL: {mal_entry.updated_at}, AL: {anilist_entry.updated_at}), syncing to AniList"
                 )
-                if not self.dry_run:
-                    # Copy AniList ID from the matched entry to the MAL entry
-                    mal_entry.anilist_id = anilist_entry.anilist_id
-                    self.anilist.update_anime(mal_entry)
+                if self.dry_run:
+                    return True
+                # Copy AniList ID from the matched entry to the MAL entry
+                mal_entry.anilist_id = anilist_entry.anilist_id
+                return self.anilist.update_anime(mal_entry)
             else:
-                logger.debug(f"Entries in sync for {anilist_entry.title}, same update time")
+                logger.debug(f"Entries in sync for {self._safe_title(anilist_entry.title)}, same update time")
+                return True
         else:
             # Fallback to episode count if timestamps missing
-            logger.warning(f"Missing timestamps for {anilist_entry.title}, using episode count fallback")
+            logger.warning(f"Missing timestamps for {self._safe_title(anilist_entry.title)}, using episode count fallback")
             if anilist_entry.episodes_watched > mal_entry.episodes_watched:
-                logger.info(f"AniList has more progress for {anilist_entry.title}, syncing to MAL")
-                if not self.dry_run:
-                    self.mal.update_anime(anilist_entry)
+                logger.debug(f"AniList has more progress for {self._safe_title(anilist_entry.title)}, syncing to MAL")
+                if self.dry_run:
+                    return True
+                return self.mal.update_anime(anilist_entry)
             elif mal_entry.episodes_watched > anilist_entry.episodes_watched:
-                logger.info(f"MAL has more progress for {mal_entry.title}, syncing to AniList")
-                if not self.dry_run:
-                    # Copy AniList ID from the matched entry to the MAL entry
-                    mal_entry.anilist_id = anilist_entry.anilist_id
-                    self.anilist.update_anime(mal_entry)
+                logger.debug(f"MAL has more progress for {self._safe_title(mal_entry.title)}, syncing to AniList")
+                if self.dry_run:
+                    return True
+                # Copy AniList ID from the matched entry to the MAL entry
+                mal_entry.anilist_id = anilist_entry.anilist_id
+                return self.anilist.update_anime(mal_entry)
+            else:
+                # Episodes are the same, no sync needed
+                return True

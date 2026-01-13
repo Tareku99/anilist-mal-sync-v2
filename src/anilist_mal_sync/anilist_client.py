@@ -29,6 +29,13 @@ class AniListClient(BaseAPIClient):
                 "Accept": "application/json",
             }
         )
+    
+    @staticmethod
+    def _safe_title(title: str) -> str:
+        """Return a console-safe title string (avoid encoding errors on Windows)."""
+        if not title:
+            return ""
+        return title.encode("ascii", "replace").decode("ascii")
 
     def _query(self, query: str, variables: Optional[dict] = None) -> dict:
         """Execute a GraphQL query."""
@@ -156,7 +163,7 @@ class AniListClient(BaseAPIClient):
     def update_anime(self, entry: AnimeEntry) -> bool:
         """Update an anime entry on AniList."""
         if not entry.anilist_id:
-            logger.warning(f"Cannot update AniList entry without anilist_id: {entry.title}")
+            logger.warning(f"Cannot update AniList entry without anilist_id: {self._safe_title(entry.title)}")
             return False
 
         # Reverse map status
@@ -187,8 +194,8 @@ class AniListClient(BaseAPIClient):
 
         try:
             self._query(mutation, variables)
-            logger.info(f"Updated AniList entry: {entry.title}")
+            logger.info(f"Updated AniList entry: {self._safe_title(entry.title)} (episodes: {entry.episodes_watched})")
             return True
         except Exception as e:
-            logger.error(f"Failed to update AniList entry {entry.title}: {e}")
+            logger.error(f"Failed to update AniList entry {self._safe_title(entry.title)}: {e}")
             return False

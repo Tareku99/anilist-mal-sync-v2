@@ -13,11 +13,7 @@ on:
         description: 'Branch to build and push'
         required: true
         default: 'main'
-        type: choice
-        options:
-          - main
-          - development
-
+        type: string
 env:
   REGISTRY: ghcr.io
   IMAGE_NAME: ${{ github.repository }}
