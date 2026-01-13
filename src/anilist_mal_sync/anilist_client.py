@@ -194,7 +194,7 @@ class AniListClient(BaseAPIClient):
 
         try:
             self._query(mutation, variables)
-            logger.info(f"Updated AniList entry: {self._safe_title(entry.title)}")
+            logger.info(f"Updated AniList entry: {self._safe_title(entry.title)} (episodes: {entry.episodes_watched})")
             return True
         except Exception as e:
             logger.error(f"Failed to update AniList entry {self._safe_title(entry.title)}: {e}")

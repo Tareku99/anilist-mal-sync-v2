@@ -76,9 +76,16 @@ def _show_config_error(invalid_vars: list[str], config_path: str = "data/config.
 
 def setup_logging(level: str):
     """Configure logging for the application."""
+    # Include module name only in DEBUG mode for cleaner logs
+    log_level = getattr(logging, level)
+    if log_level == logging.DEBUG:
+        format_str = "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+    else:
+        format_str = "%(asctime)s - %(levelname)s - %(message)s"
+    
     logging.basicConfig(
-        level=getattr(logging, level),
-        format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+        level=log_level,
+        format=format_str,
         handlers=[
             logging.StreamHandler(sys.stdout),
         ],
@@ -231,13 +238,23 @@ def run(mode: str, dry_run: bool, interval: int, log_level: str, once: bool, no_
     if not no_web_ui:
         import threading
         import uvicorn
-        from .web import app, update_sync_status
+        from .web import app, update_sync_status, set_cli_sync_params, is_sync_running, acquire_sync_lock
+        
+        # Store CLI sync parameters for manual sync button
+        set_cli_sync_params(mode, dry_run)
         
         # Start sync service in background thread
         def sync_service():
             last_mtime = None
             config_valid = True
             run_count = 0
+            
+            # Initialize status
+            update_sync_status(running=True)
+            # Calculate and set initial next_sync time (when first sync will run)
+            next_sync_time = time.localtime(time.time() + interval_seconds)
+            next_sync_str = time.strftime('%Y-%m-%d %H:%M:%S %Z', next_sync_time)
+            update_sync_status(next_sync=next_sync_str)
             
             while True:
                 # Check config file modification time
@@ -273,32 +290,77 @@ def run(mode: str, dry_run: bool, interval: int, log_level: str, once: bool, no_
                     time.sleep(10)
                     continue
                 
+                # Skip scheduled sync if any sync is already running (using lock)
+                if is_sync_running():
+                    logger.info("[INFO] Sync already in progress, skipping scheduled sync. Will retry after interval...")
+                    try:
+                        time.sleep(interval_seconds)
+                    except KeyboardInterrupt:
+                        update_sync_status(running=False)
+                        logger.info("Sync service stopped")
+                        break
+                    continue
+                
+                # Try to acquire sync lock
+                if not acquire_sync_lock():
+                    logger.info("[INFO] Could not acquire sync lock, skipping scheduled sync. Will retry after interval...")
+                    try:
+                        time.sleep(interval_seconds)
+                    except KeyboardInterrupt:
+                        update_sync_status(running=False)
+                        logger.info("Sync service stopped")
+                        break
+                    continue
+                
                 run_count += 1
                 logger.info(f"Starting sync run #{run_count}...")
                 
                 try:
                     success, result = execute_sync(mode, dry_run=dry_run or settings.dry_run, settings=settings)
-                    if success and result and result.success:
-                        logger.info(f"Sync run #{run_count} completed successfully")
-                        update_sync_status(
-                            running=True,
-                            last_sync=time.strftime('%Y-%m-%d %H:%M:%S %Z'),
-                            last_result="Success"
-                        )
+                    if success and result:
+                        # Always show detailed counts
+                        total = result.entries_synced + result.entries_failed
+                        if result.success:
+                            logger.info(f"Sync run #{run_count} completed: {result.entries_synced}/{total} synced, 0 failed")
+                            update_sync_status(
+                                running=True,
+                                last_sync=time.strftime('%Y-%m-%d %H:%M:%S %Z'),
+                                last_result=f"{result.entries_synced}/{total} synced, 0 failed"
+                            )
+                        elif result.entries_synced > 0:
+                            # Partial success - some entries synced, some failed
+                            logger.warning(f"Sync run #{run_count} completed: {result.entries_synced}/{total} synced, {result.entries_failed} failed")
+                            update_sync_status(
+                                running=True,
+                                last_sync=time.strftime('%Y-%m-%d %H:%M:%S %Z'),
+                                last_result=f"{result.entries_synced}/{total} synced, {result.entries_failed} failed"
+                            )
+                        else:
+                            # Complete failure - no entries synced
+                            logger.error(f"Sync run #{run_count} failed: 0/{total} synced, {result.entries_failed} failed")
+                            update_sync_status(
+                                running=True,
+                                last_sync=time.strftime('%Y-%m-%d %H:%M:%S %Z'),
+                                last_result=f"0/{total} synced, {result.entries_failed} failed"
+                            )
                     else:
-                        logger.error(f"Sync run #{run_count} failed")
+                        logger.error(f"Sync run #{run_count} failed: Could not execute sync")
                         update_sync_status(
                             running=True,
                             last_sync=time.strftime('%Y-%m-%d %H:%M:%S %Z'),
                             last_result="Failed"
                         )
                 except Exception as e:
-                    logger.error(f"Sync run #{run_count} failed: {e}")
+                    logger.error(f"Sync run #{run_count} failed with exception: {e}")
                     update_sync_status(
                         running=True,
                         last_sync=time.strftime('%Y-%m-%d %H:%M:%S %Z'),
                         last_result=f"Error: {str(e)}"
                     )
+                finally:
+                    # Always release the lock when sync completes
+                    from .web import _sync_lock
+                    _sync_lock.release()
                 
                 logger.info("")
                 logger.info(f"Waiting {interval} minutes until next sync...")
@@ -373,12 +435,19 @@ def run(mode: str, dry_run: bool, interval: int, log_level: str, once: bool, no_
             
             try:
                 success, result = execute_sync(mode, dry_run=dry_run or settings.dry_run, settings=settings)
-                if success and result and result.success:
-                    logger.info(f"Sync run #{run_count} completed successfully")
+                if success and result:
+                    # Always show detailed counts
+                    total = result.entries_synced + result.entries_failed
+                    if result.success:
+                        logger.info(f"Sync run #{run_count} completed: {result.entries_synced}/{total} synced, 0 failed")
+                    elif result.entries_synced > 0:
+                        logger.warning(f"Sync run #{run_count} completed: {result.entries_synced}/{total} synced, {result.entries_failed} failed")
+                    else:
+                        logger.error(f"Sync run #{run_count} failed: 0/{total} synced, {result.entries_failed} failed")
                 else:
-                    logger.error(f"Sync run #{run_count} failed")
+                    logger.error(f"Sync run #{run_count} failed: Could not execute sync")
             except Exception as e:
-                logger.error(f"Sync run #{run_count} failed: {e}")
+                logger.error(f"Sync run #{run_count} failed with exception: {e}")
             
             logger.info("")
             logger.info(f"Waiting {interval} minutes until next sync...")

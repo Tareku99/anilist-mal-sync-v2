@@ -140,7 +140,7 @@ class SyncEngine:
                         logger.debug(f"  -> MAL entry not found in dict, will update")
                     elif not self._needs_update(entry, target_entry, score_mode):
                         summary["skipped_unchanged"] += 1
-                        logger.info(f"No changes for {self._safe_title(entry.title)}, skipping")
+                        logger.debug(f"No changes for {self._safe_title(entry.title)}, skipping")
                         continue
                     else:
                         logger.debug(f"  -> Will update (changes detected)")
@@ -177,7 +177,7 @@ class SyncEngine:
                         logger.debug(f"  -> AniList entry not found in dict, will update")
                     elif not self._needs_update(entry, target_entry, score_mode):
                         summary["skipped_unchanged"] += 1
-                        logger.info(f"No changes for {self._safe_title(entry.title)}, skipping")
+                        logger.debug(f"No changes for {self._safe_title(entry.title)}, skipping")
                         continue
                     else:
                         logger.debug(f"  -> Will update (changes detected)")
@@ -268,7 +268,7 @@ class SyncEngine:
         # Use timestamps to determine which entry is newer
         if anilist_entry.updated_at and mal_entry.updated_at:
             if anilist_entry.updated_at > mal_entry.updated_at:
-                logger.info(
+                logger.debug(
                     f"AniList has newer update for {self._safe_title(anilist_entry.title)} "
                     f"(AL: {anilist_entry.updated_at}, MAL: {mal_entry.updated_at}), syncing to MAL"
                 )
@@ -276,7 +276,7 @@ class SyncEngine:
                     return True
                 return self.mal.update_anime(anilist_entry)
             elif mal_entry.updated_at > anilist_entry.updated_at:
-                logger.info(
+                logger.debug(
                     f"MAL has newer update for {self._safe_title(mal_entry.title)} "
                     f"(MAL: {mal_entry.updated_at}, AL: {anilist_entry.updated_at}), syncing to AniList"
                 )
@@ -292,12 +292,12 @@ class SyncEngine:
             # Fallback to episode count if timestamps missing
             logger.warning(f"Missing timestamps for {self._safe_title(anilist_entry.title)}, using episode count fallback")
             if anilist_entry.episodes_watched > mal_entry.episodes_watched:
-                logger.info(f"AniList has more progress for {self._safe_title(anilist_entry.title)}, syncing to MAL")
+                logger.debug(f"AniList has more progress for {self._safe_title(anilist_entry.title)}, syncing to MAL")
                 if self.dry_run:
                     return True
                 return self.mal.update_anime(anilist_entry)
             elif mal_entry.episodes_watched > anilist_entry.episodes_watched:
-                logger.info(f"MAL has more progress for {self._safe_title(mal_entry.title)}, syncing to AniList")
+                logger.debug(f"MAL has more progress for {self._safe_title(mal_entry.title)}, syncing to AniList")
                 if self.dry_run:
                     return True
                 # Copy AniList ID from the matched entry to the MAL entry

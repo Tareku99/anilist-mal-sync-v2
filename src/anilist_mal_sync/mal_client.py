@@ -131,7 +131,7 @@ class MALClient(BaseAPIClient):
             response = self.session.patch(url, data=data)
             self._handle_auth_error(response, "MyAnimeList")
             response.raise_for_status()
-            logger.info(f"Updated MAL entry: {self._safe_title(entry.title)}")
+            logger.info(f"Updated MAL entry: {self._safe_title(entry.title)} (episodes: {entry.episodes_watched})")
             return True
         except Exception as e:
             logger.error(f"Failed to update MAL entry {self._safe_title(entry.title)}: {e}")
