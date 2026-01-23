@@ -230,7 +230,31 @@ def run(mode: str, dry_run: bool, interval: int, log_level: str, once: bool, no_
     logger.info(f"Mode: {mode}")
     logger.info(f"Interval: {interval} minutes ({interval//60}h {interval%60}m)")
     if not no_web_ui:
-        logger.info(f"Web UI: http://localhost:{port}")
+        # Try to get server IP from config redirect_uri for better Docker/Unraid display
+        web_ui_url = f"http://localhost:{port}"
+        try:
+            # Check config for redirect_uri to determine server IP
+            # Works for both local and Docker deployments
+            if os.path.exists("/.dockerenv"):
+                config_path = Path("/app/data/config.yaml")
+            else:
+                config_path = Path("data/config.yaml")
+            
+            if config_path.exists():
+                import yaml
+                with open(config_path, 'r') as f:
+                    config = yaml.safe_load(f)
+                    redirect_uri = config.get('oauth', {}).get('redirect_uri', '')
+                    if redirect_uri and '://' in redirect_uri:
+                        # Extract host from redirect_uri (e.g., http://192.168.1.250:18080/callback)
+                        from urllib.parse import urlparse
+                        parsed = urlparse(redirect_uri)
+                        if parsed.hostname and parsed.hostname not in ('localhost', '127.0.0.1'):
+                            # Use the IP/hostname from redirect_uri for Web UI
+                            web_ui_url = f"http://{parsed.hostname}:{port}"
+        except Exception:
+            pass  # Fall back to localhost if anything fails
+        logger.info(f"Web UI: {web_ui_url}")
     logger.info("="*60)
     logger.info("")
     
