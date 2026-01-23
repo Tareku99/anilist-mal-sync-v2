@@ -2,13 +2,9 @@ name: Build and Push Docker Image
 
 on:
   # Manual workflow dispatch only - no automatic builds
+  # Run from the branch you want to build
   workflow_dispatch:
     inputs:
-      branch:
-        description: 'Branch to build and push'
-        required: true
-        default: 'main'
-        type: string
       tag:
         description: 'Optional tag to create (e.g., v1.0.0)'
         required: false
@@ -27,8 +23,6 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
-        with:
-          ref: ${{ inputs.branch }}
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -57,8 +51,8 @@ jobs:
         with:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
           tags: |
-            type=raw,value=latest,enable=${{ inputs.branch == 'main' }}
-            type=raw,value=${{ inputs.branch }},enable=${{ inputs.branch != 'main' }}
+            type=raw,value=latest,enable=${{ github.ref == 'refs/heads/main' }}
+            type=ref,event=branch
             type=raw,value=${{ inputs.tag }},enable=${{ inputs.tag != '' }}
             type=sha,short=true
 
