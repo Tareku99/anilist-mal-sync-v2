@@ -35,6 +35,7 @@ ENV/
 
 # Environment and secrets
 config.yaml
+config.yaml.backup
 tokens.json
 *.log
 
@@ -42,6 +43,8 @@ tokens.json
 .pytest_cache/
 .coverage
 htmlcov/
+TEST*.md
+OAUTH*.md
 
 # OS
 .DS_Store

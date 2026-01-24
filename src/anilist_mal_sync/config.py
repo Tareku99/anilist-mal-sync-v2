@@ -105,8 +105,8 @@ class Settings:
         example_path = Path("config.example.yaml")
         if example_path.exists():
             shutil.copy(example_path, self.config_path)
-            logger.info(f"✅ Created config template: {self.config_path}")
-            logger.info("📝 Please edit the config file with your credentials")
+            logger.info(f"[OK] Created config template: {self.config_path}")
+            logger.info("[INFO] Please edit the config file with your credentials")
     
     def _load_config(self) -> None:
         """Load configuration from YAML using Pydantic."""
@@ -115,7 +115,7 @@ class Settings:
                 raw_config = yaml.safe_load(f) or {}
             
             config = Config(**raw_config)
-            logger.info(f"✅ Loaded configuration from {self.config_path}")
+            logger.info(f"[OK] Loaded configuration from {self.config_path}")
             
             # Map to attributes for backward compatibility
             self.oauth_port = config.oauth.port
@@ -149,7 +149,7 @@ class Settings:
             self._set_env_vars()
         
         except Exception as e:
-            logger.error(f"❌ Failed to load config: {e}")
+            logger.error(f"[ERROR] Failed to load config: {e}")
             raise
     
     def _set_env_vars(self) -> None:
@@ -177,6 +177,19 @@ def validate_credentials() -> tuple[bool, list[str]]:
     return len(missing_or_invalid) == 0, missing_or_invalid
 
 
+
+# Singleton cache for settings
+_SETTINGS_SINGLETON = None
+
 def get_settings() -> Settings:
-    """Get application settings singleton."""
-    return Settings()
+    """Get (cached) application settings singleton."""
+    global _SETTINGS_SINGLETON
+    if _SETTINGS_SINGLETON is None:
+        _SETTINGS_SINGLETON = Settings()
+    return _SETTINGS_SINGLETON
+
+def reload_settings() -> Settings:
+    """Force reload of application settings singleton."""
+    global _SETTINGS_SINGLETON
+    _SETTINGS_SINGLETON = Settings()
+    return _SETTINGS_SINGLETON

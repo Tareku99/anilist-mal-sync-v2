@@ -11,10 +11,10 @@
   <Project>https://github.com/Tareku99/anilist-mal-sync</Project>
   <Overview>Bidirectional sync service between AniList and MyAnimeList with OAuth authentication, conflict resolution, and Docker deployment.</Overview>
   <Category>Tools: Status:Stable</Category>
-  <WebUI/>
+  <WebUI>http://[IP]:[PORT:8080]</WebUI>
   <TemplateURL>https://raw.githubusercontent.com/Tareku99/anilist-mal-sync/main/anilist-mal-sync.xml</TemplateURL>
   <Icon>https://raw.githubusercontent.com/Tareku99/anilist-mal-sync/main/icon.png</Icon>
-  <ExtraParams/>
+  <ExtraParams>--restart unless-stopped</ExtraParams>
   <PostArgs/>
   <CPUset/>
   <DateInstalled/>
@@ -22,5 +22,7 @@
   <DonateLink/>
   <Requires/>
   <Config Name="OAuth Port" Target="18080" Default="18080" Mode="tcp" Description="OAuth callback port for authentication" Type="Port" Display="always" Required="true" Mask="false">18080</Config>
+  <Config Name="Web UI Port" Target="8080" Default="8080" Mode="tcp" Description="Web UI dashboard port" Type="Port" Display="always" Required="true" Mask="false">8080</Config>
   <Config Name="Data Directory" Target="/app/data" Default="/mnt/user/appdata/anilist-mal-sync" Mode="rw" Description="Contains config.yaml and tokens.json" Type="Path" Display="always" Required="true" Mask="false">/mnt/user/appdata/anilist-mal-sync</Config>
+  <Config Name="Timezone" Target="TZ" Default="America/Boise" Mode="" Description="Container timezone (e.g., America/New_York, Europe/London, Asia/Tokyo)" Type="Variable" Display="always" Required="false" Mask="false">America/Boise</Config>
 </Container>
