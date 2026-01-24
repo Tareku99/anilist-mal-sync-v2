@@ -73,31 +73,63 @@ async def dashboard():
     <title>AniList-MAL Sync Dashboard</title>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
+        html, body {
+            height: 100%;
+            overflow: hidden;
+        }
         body {
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            min-height: 100vh;
-            padding: 20px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%) fixed;
+            padding: 15px;
+            overflow-x: hidden;
+            overflow-y: hidden;
+            display: flex;
+            flex-direction: column;
         }
-        .container { max-width: 1200px; margin: 0 auto; }
+        .container { 
+            max-width: 95%; 
+            margin: 0 auto; 
+            padding: 0 10px; 
+            overflow-x: hidden; 
+            overflow-y: hidden;
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            min-height: 0;
+        }
         .header {
             text-align: center;
             color: white;
-            margin-bottom: 30px;
+            margin-bottom: 15px;
+            flex-shrink: 0;
         }
-        .header h1 { font-size: 2.5em; margin-bottom: 10px; }
-        .header p { opacity: 0.9; }
+        .header h1 { font-size: 2em; margin-bottom: 8px; }
+        .header p { opacity: 0.9; font-size: 0.95em; }
         .cards {
             display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            grid-template-columns: 1fr 2fr;
             gap: 20px;
-            margin-bottom: 30px;
+            margin-bottom: 15px;
+            flex: 1;
+            min-height: 0;
+        }
+        @media (max-width: 1024px) {
+            .cards { grid-template-columns: 1fr; }
         }
         .card {
             background: white;
             border-radius: 12px;
-            padding: 25px;
+            padding: 20px;
             box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+            display: flex;
+            flex-direction: column;
+            height: fit-content;
+        }
+        .card.config-card {
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+            min-height: 0;
         }
         .card h2 {
             color: #667eea;
@@ -139,13 +171,20 @@ async def dashboard():
         .btn-secondary:hover:not(:disabled) { background: #643a8a; }
         .config-editor {
             width: 100%;
-            height: 400px;
+            flex: 1;
+            min-height: 0;
             font-family: 'Courier New', monospace;
-            font-size: 14px;
+            font-size: 15px;
+            line-height: 1.6;
             padding: 15px;
             border: 2px solid #e5e7eb;
             border-radius: 6px;
-            resize: vertical;
+            resize: none;
+            overflow-y: auto;
+            overflow-x: hidden;
+            white-space: pre-wrap;
+            word-wrap: break-word;
+            box-sizing: border-box;
         }
         .config-editor:focus {
             outline: none;
@@ -181,8 +220,13 @@ async def dashboard():
         .footer {
             text-align: center;
             color: white;
-            margin-top: 30px;
+            margin-top: 10px;
             opacity: 0.8;
+            flex-shrink: 0;
+        }
+        .footer a:hover {
+            opacity: 1;
+            text-decoration: underline;
         }
     </style>
 </head>
@@ -220,9 +264,11 @@ async def dashboard():
                 <button class="btn" id="refresh-btn" onclick="refreshStatus()">🔄 Refresh Status</button>
             </div>
 
-            <div class="card">
+            <div class="card config-card">
                 <h2>⚙️ Configuration</h2>
-                <textarea class="config-editor" id="config-editor" placeholder="Loading configuration..."></textarea>
+                <div style="flex: 1; display: flex; flex-direction: column; min-height: 0;">
+                    <textarea class="config-editor" id="config-editor" placeholder="Loading configuration..."></textarea>
+                </div>
                 <button class="btn" onclick="loadConfig()">📥 Reload Config</button>
                 <button class="btn btn-secondary" onclick="saveConfig()">💾 Save Config</button>
                 <div class="message" id="config-message"></div>
@@ -234,6 +280,11 @@ async def dashboard():
 
         <div class="footer">
             <p>AniList-MAL Sync v0.1.0 | Made with ❤️</p>
+            <p style="margin-top: 10px;">
+                <a href="https://ko-fi.com/tareku" target="_blank" rel="noopener noreferrer" style="color: white; text-decoration: none; opacity: 0.9; transition: opacity 0.2s;">
+                    ☕ Support the project on <strong>Ko-fi</strong>
+                </a>
+            </p>
         </div>
     </div>
 
