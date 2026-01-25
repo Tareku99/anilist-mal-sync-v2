@@ -230,28 +230,37 @@ def run(mode: str, dry_run: bool, interval: int, log_level: str, once: bool, no_
     logger.info(f"Mode: {mode}")
     logger.info(f"Interval: {interval} minutes ({interval//60}h {interval%60}m)")
     if not no_web_ui:
-        # Try to get server IP from config redirect_uri for better Docker/Unraid display
+        # Determine Web UI URL
         web_ui_url = f"http://localhost:{port}"
         try:
-            # Check config for redirect_uri to determine server IP
-            # Works for both local and Docker deployments
             if os.path.exists("/.dockerenv"):
+                # In Docker: Use IP from redirect_uri in config
                 config_path = Path("/app/data/config.yaml")
+                if config_path.exists():
+                    import yaml
+                    with open(config_path, 'r') as f:
+                        config = yaml.safe_load(f)
+                        redirect_uri = config.get('oauth', {}).get('redirect_uri', '')
+                        if redirect_uri and '://' in redirect_uri:
+                            from urllib.parse import urlparse
+                            parsed = urlparse(redirect_uri)
+                            if parsed.hostname and parsed.hostname not in ('localhost', '127.0.0.1'):
+                                web_ui_url = f"http://{parsed.hostname}:{port}"
             else:
-                config_path = Path("data/config.yaml")
-            
-            if config_path.exists():
-                import yaml
-                with open(config_path, 'r') as f:
-                    config = yaml.safe_load(f)
-                    redirect_uri = config.get('oauth', {}).get('redirect_uri', '')
-                    if redirect_uri and '://' in redirect_uri:
-                        # Extract host from redirect_uri (e.g., http://192.168.1.250:18080/callback)
-                        from urllib.parse import urlparse
-                        parsed = urlparse(redirect_uri)
-                        if parsed.hostname and parsed.hostname not in ('localhost', '127.0.0.1'):
-                            # Use the IP/hostname from redirect_uri for Web UI
-                            web_ui_url = f"http://{parsed.hostname}:{port}"
+                # Local: Detect actual local IP address
+                import socket
+                # Connect to a remote address to determine local IP
+                # This doesn't actually send data, just determines which interface would be used
+                s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+                try:
+                    # Connect to a non-routable address (doesn't actually connect)
+                    s.connect(('8.8.8.8', 80))
+                    local_ip = s.getsockname()[0]
+                    s.close()
+                    if local_ip and local_ip != '127.0.0.1':
+                        web_ui_url = f"http://{local_ip}:{port}"
+                except Exception:
+                    pass
         except Exception:
             pass  # Fall back to localhost if anything fails
         logger.info(f"Web UI: {web_ui_url}")
@@ -406,15 +415,40 @@ def run(mode: str, dry_run: bool, interval: int, log_level: str, once: bool, no_
         sync_thread.start()
         
         # Run FastAPI server (this blocks)
+        # Suppress asyncio CancelledError tracebacks during shutdown
+        import asyncio
+        import signal
+        
+        def shutdown_handler(sig, frame):
+            """Handle shutdown signals gracefully."""
+            update_sync_status(running=False)
+            print()  # New line
+            logger.info("="*60)
+            logger.info("Service stopped by user")
+            logger.info("="*60)
+            # Use os._exit to bypass Python's exception handling and prevent tracebacks
+            os._exit(0)
+        
+        # Register signal handler to catch Ctrl+C before uvicorn handles it
+        signal.signal(signal.SIGINT, shutdown_handler)
+        
+        # Suppress CancelledError and SystemExit tracebacks
+        original_excepthook = sys.excepthook
+        def custom_excepthook(exc_type, exc_value, exc_traceback):
+            # Suppress CancelledError and SystemExit (from our shutdown handler)
+            if exc_type is asyncio.CancelledError:
+                return
+            if exc_type is SystemExit and exc_value.code == 0:
+                return
+            original_excepthook(exc_type, exc_value, exc_traceback)
+        sys.excepthook = custom_excepthook
+        
         try:
             uvicorn.run(app, host=host, port=port, log_level="warning")
         except KeyboardInterrupt:
-            update_sync_status(running=False)
-            logger.info("")
-            logger.info("="*60)
-            logger.info("Web UI stopped by user")
-            logger.info("="*60)
-            sys.exit(0)
+            shutdown_handler(None, None)
+        finally:
+            sys.excepthook = original_excepthook
     else:
         # --no-web-ui: Continuous sync without web UI (like old run command)
         last_mtime = None
